@@ -1,0 +1,6 @@
+
+# Ignore private uploads and backend environment files
+/backend/uploads/
+/backend/.env
+/backend/.venv/
+backend/test_document.txt
