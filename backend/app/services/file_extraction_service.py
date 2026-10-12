@@ -1,6 +1,10 @@
 import csv
 import os
 
+# ============================================================
+# IMPORTS
+# ============================================================
+
 from docx import Document
 from openpyxl import load_workbook
 from pptx import Presentation

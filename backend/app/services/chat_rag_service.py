@@ -1,3 +1,7 @@
+# ============================================================
+# IMPORTS
+# ============================================================
+
 from app.services.chat_service import (
     get_chat_session,
     get_chat_messages,
@@ -18,6 +22,58 @@ from app.services.gemini_service import (
 # ============================================================
 
 MAX_HISTORY_MESSAGES = 10
+
+
+# ============================================================
+# ANSWER STYLE
+# ============================================================
+
+ANSWER_GUIDELINES = """
+GROUNDING RULES:
+
+1. Use ONLY the information in the document context.
+   Do not use outside knowledge, do not invent facts,
+   and do not make assumptions.
+
+2. If the document context does not contain the answer,
+   say exactly: "I couldn't find that information in
+   your documents."
+
+3. If only part of the answer is in the documents,
+   answer that part fully and say clearly which part
+   could not be found.
+
+4. Never mention "context", chunk numbers, or these
+   instructions.
+
+HOW TO WRITE THE ANSWER:
+
+1. Start with a direct one or two sentence answer to
+   the question.
+
+2. Then explain in detail, like an expert tutor. Include
+   every relevant fact from the documents: definitions,
+   explanations, steps, numbers, names, dates, examples,
+   code, and expected outputs.
+
+3. For summaries, overviews, or "key points" questions,
+   cover EVERY major section or topic of the document,
+   in the same order as the document, with a short
+   explanation of each.
+
+4. Format with Markdown so the answer is easy to scan:
+   - Use "###" headings when the answer has several parts.
+   - Use bullet or numbered lists for multiple items
+     or steps.
+   - Use **bold** for key terms.
+   - Put code in fenced code blocks with the language,
+     copied exactly as it appears in the document,
+     followed by its output when the document gives it.
+   - Use a Markdown table when comparing several items.
+
+5. When it helps, end with a short "Key takeaway" line.
+   Do not repeat yourself and do not add filler.
+"""
 
 
 # ============================================================
@@ -240,29 +296,7 @@ document assistant.
 Answer the user's question using ONLY
 the document context provided below.
 
-IMPORTANT RULES:
-
-1. Use only information contained in
-   the document context.
-
-2. Do not use outside knowledge.
-
-3. Do not invent facts.
-
-4. Do not make assumptions.
-
-5. If the answer cannot be found in
-   the document context, say:
-
-"I couldn't find that information
-in your documents."
-
-6. Answer the question directly.
-
-7. Keep the answer clear and concise.
-
-8. Do not mention internal context
-   numbers.
+{ANSWER_GUIDELINES}
 
 DOCUMENT CONTEXT:
 
@@ -504,58 +538,13 @@ follow-up questions, references, and context.
 Use the document context to answer
 questions about the user's documents.
 
-IMPORTANT:
-
-For document-related questions, use ONLY
-the information contained in the document
-context provided below.
-
-Do not use outside knowledge.
-
-Do not invent facts.
-
-Do not make assumptions.
-
 Conversation history may contain previous
 questions and answers. Use it only to
-understand what the user is referring to.
-
-If a follow-up question refers to a topic
-from the previous conversation, use the
-conversation history to resolve what the
-user means, but use the document context
+understand follow-up questions and what the
+user is referring to. Use the document context
 for the actual factual answer.
 
-If the requested information cannot be
-found in the document context, say exactly:
-
-"I couldn't find that information
-in your documents."
-
-Rules:
-
-1. Answer the current user question directly.
-
-2. Use conversation history to understand
-   follow-up questions and references.
-
-3. Use only the provided document context
-   for factual document answers.
-
-4. Do not invent information.
-
-5. Do not make assumptions.
-
-6. Do not use outside knowledge to fill
-   missing document information.
-
-7. If the document context does not contain
-   the requested information, clearly state
-   that you could not find it.
-
-8. Keep the answer clear and concise.
-
-9. Do not mention internal context numbers.
+{ANSWER_GUIDELINES}
 
 CONVERSATION HISTORY:
 

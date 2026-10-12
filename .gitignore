@@ -1,6 +1,54 @@
+# ============================================================
+# SECRETS AND ENVIRONMENT VARIABLES
+# ============================================================
+.env
+.env.*
+!.env.example
 
-# Ignore private uploads and backend environment files
+# ============================================================
+# PYTHON (BACKEND)
+# ============================================================
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ============================================================
+# USER UPLOADS AND LOCAL TEST FILES
+# ============================================================
 /backend/uploads/
-/backend/.env
-/backend/.venv/
-backend/test_document.txt
+/backend/test_document.txt
+
+# ============================================================
+# NODE (FRONTEND)
+# ============================================================
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# ============================================================
+# LOGS
+# ============================================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ============================================================
+# OPERATING SYSTEM AND EDITORS
+# ============================================================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp

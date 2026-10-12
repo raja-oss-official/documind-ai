@@ -1,3 +1,7 @@
+# ============================================================
+# IMPORTS
+# ============================================================
+
 import re
 
 from app.services.search_service import (
@@ -16,11 +20,35 @@ from app.core.database import db
 # CONFIGURATION
 # ============================================================
 
-SEARCH_RESULT_LIMIT = 8
+SEARCH_RESULT_LIMIT = 12
 
-MAX_ANCHORS = 2
+MAX_ANCHORS = 4
 
-MAX_CONTEXT_CHUNKS = 6
+MAX_CONTEXT_CHUNKS = 12
+
+# Whole-document context: small documents (and broad questions such
+# as "summarize" or "key points") are answered from the full text in
+# document order instead of a few retrieved fragments.
+
+FULL_CONTEXT_CHAR_LIMIT = 30000
+
+MAX_FULL_CONTEXT_DOCUMENTS = 2
+
+MAX_FULL_CONTEXT_SOURCES = 5
+
+BROAD_QUESTION_PATTERN = re.compile(
+    r"\b("
+    r"summar\w*|overview|outline|key points?|main points?|"
+    r"main ideas?|key (ideas?|concepts?|topics?|takeaways?)|"
+    r"all (the )?(topics?|concepts?|sections?|points?|details?)|"
+    r"everything|table of contents|what is (this|the|my) "
+    r"(document|file|pdf)|what('s| is) (it|this) about|"
+    r"explain (this|the|my) (document|file|pdf)|"
+    r"(whole|entire|full) (document|file|pdf)|"
+    r"(each|every) (section|topic|chapter)"
+    r")\b",
+    re.IGNORECASE
+)
 
 STRONG_ANCHOR_SCORE = 0.70
 
@@ -1053,6 +1081,277 @@ ANSWER:
 
 
 # ============================================================
+# WHOLE-DOCUMENT CONTEXT
+# ============================================================
+
+def is_broad_question(
+    question: str
+) -> bool:
+    """
+    Detect questions that need the whole document rather
+    than a few matching passages.
+    """
+
+    return bool(
+        BROAD_QUESTION_PATTERN.search(
+            question or ""
+        )
+    )
+
+
+# ============================================================
+# LOAD DOCUMENT CHUNKS
+# ============================================================
+
+def load_document_chunks(
+    user_id: str,
+    document_id: str
+):
+    """
+    Load every chunk of one user-owned document in
+    document order (embeddings excluded).
+    """
+
+    return list(
+
+        db.document_chunks.find(
+            {
+                "user_id":
+                    user_id,
+                "document_id":
+                    document_id
+            },
+            {
+                "embedding":
+                    0
+            }
+        ).sort(
+            "chunk_index",
+            1
+        )
+
+    )
+
+
+# ============================================================
+# SAMPLE CHUNKS EVENLY (LARGE DOCUMENTS)
+# ============================================================
+
+def sample_chunks_evenly(
+    chunks: list[dict],
+    char_budget: int
+):
+    """
+    Pick chunks spread evenly from the start to the end of
+    a document so a large document is still covered fully.
+    """
+
+    if not chunks or char_budget <= 0:
+
+        return []
+
+    total_chars = sum(
+        len(chunk.get("text", ""))
+        for chunk in chunks
+    )
+
+    average = max(
+        1,
+        total_chars // len(chunks)
+    )
+
+    count = max(
+        1,
+        min(
+            len(chunks),
+            char_budget // average
+        )
+    )
+
+    step = len(chunks) / count
+
+    return [
+        chunks[int(position * step)]
+        for position in range(count)
+    ]
+
+
+# ============================================================
+# CHOOSE DOCUMENTS TO READ IN FULL
+# ============================================================
+
+def candidate_document_ids(
+    user_id: str,
+    document_id: str | None,
+    retrieved_chunks: list[dict]
+):
+    """
+    Decide which documents to read in full: the chat's
+    document, else the best-matching documents, else the
+    user's most recent completed documents.
+    """
+
+    if document_id:
+
+        return [document_id]
+
+    document_ids = []
+
+    for chunk in retrieved_chunks:
+
+        chunk_document_id = chunk.get(
+            "document_id"
+        )
+
+        if (
+            chunk_document_id
+            and chunk_document_id not in document_ids
+        ):
+
+            document_ids.append(
+                chunk_document_id
+            )
+
+        if len(document_ids) >= MAX_FULL_CONTEXT_DOCUMENTS:
+
+            return document_ids
+
+    if document_ids:
+
+        return document_ids
+
+    recent_documents = db.documents.find(
+        {
+            "user_id":
+                user_id,
+            "status":
+                "completed"
+        },
+        {
+            "_id":
+                1
+        }
+    ).sort(
+        "created_at",
+        -1
+    ).limit(
+        MAX_FULL_CONTEXT_DOCUMENTS
+    )
+
+    return [
+        str(document["_id"])
+        for document in recent_documents
+    ]
+
+
+# ============================================================
+# BUILD WHOLE-DOCUMENT CONTEXT
+# ============================================================
+
+def build_full_document_context(
+    user_id: str,
+    question: str,
+    document_ids: list[str],
+    broad: bool
+):
+    """
+    Return whole-document context chunks, or None when the
+    documents are too large for a specific question (the
+    normal retrieval path handles those).
+    """
+
+    documents = [
+        load_document_chunks(
+            user_id=user_id,
+            document_id=document_id
+        )
+        for document_id in document_ids
+    ]
+
+    documents = [
+        chunks
+        for chunks in documents
+        if chunks
+    ]
+
+    if not documents:
+
+        return None
+
+    total_chars = sum(
+        len(chunk.get("text", ""))
+        for chunks in documents
+        for chunk in chunks
+    )
+
+    if total_chars <= FULL_CONTEXT_CHAR_LIMIT:
+
+        selected = [
+            chunk
+            for chunks in documents
+            for chunk in chunks
+        ]
+
+    elif broad:
+
+        budget = FULL_CONTEXT_CHAR_LIMIT // len(documents)
+
+        selected = [
+            chunk
+            for chunks in documents
+            for chunk in sample_chunks_evenly(
+                chunks,
+                budget
+            )
+        ]
+
+    else:
+
+        return None
+
+    return [
+        format_neighbor_chunk(
+            chunk,
+            question
+        )
+        for chunk in selected
+    ]
+
+
+# ============================================================
+# WHOLE-DOCUMENT SOURCES
+# ============================================================
+
+def build_full_context_sources(
+    retrieved_chunks: list[dict],
+    context_chunks: list[dict]
+):
+    """
+    Sources for whole-document answers: the most relevant
+    retrieved passages, not every chunk that was read.
+    """
+
+    context_documents = {
+        chunk.get("document_id")
+        for chunk in context_chunks
+    }
+
+    relevant = [
+        chunk
+        for chunk in retrieved_chunks
+        if chunk.get("document_id") in context_documents
+    ]
+
+    if not relevant:
+
+        relevant = context_chunks
+
+    return build_sources(
+        relevant[:MAX_FULL_CONTEXT_SOURCES]
+    )
+
+
+# ============================================================
 # RETRIEVE DOCUMENT CONTEXT ONLY
 # ============================================================
 
@@ -1111,6 +1410,46 @@ def retrieve_document_context(
 
         document_id=document_id
     )
+
+    # --------------------------------------------------------
+    # Whole-document context
+    #
+    # Small documents and broad questions are answered from
+    # the full text, so answers are complete and accurate.
+    # --------------------------------------------------------
+
+    broad = is_broad_question(
+        question
+    )
+
+    full_context = None
+
+    if broad or retrieved_chunks:
+
+        full_context = build_full_document_context(
+            user_id=user_id,
+            question=question,
+            document_ids=candidate_document_ids(
+                user_id=user_id,
+                document_id=document_id,
+                retrieved_chunks=retrieved_chunks or []
+            ),
+            broad=broad
+        )
+
+    if full_context:
+
+        return {
+
+            "context_chunks":
+                full_context,
+
+            "sources":
+                build_full_context_sources(
+                    retrieved_chunks or [],
+                    full_context
+                )
+        }
 
     if not retrieved_chunks:
 

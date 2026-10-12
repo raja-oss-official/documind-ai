@@ -1,11 +1,23 @@
+# ============================================================
+# IMPORTS
+# ============================================================
+
 from datetime import datetime, timezone
 import hashlib
 
 from app.core.database import db
 
 
+# ============================================================
+# REFRESH TOKENS COLLECTION
+# ============================================================
+
 refresh_tokens_collection = db.refresh_tokens
 
+
+# ============================================================
+# HASH REFRESH TOKEN
+# ============================================================
 
 def hash_refresh_token(refresh_token: str) -> str:
     """
@@ -18,6 +30,10 @@ def hash_refresh_token(refresh_token: str) -> str:
         refresh_token.encode("utf-8")
     ).hexdigest()
 
+
+# ============================================================
+# CREATE REFRESH TOKEN RECORD
+# ============================================================
 
 def create_refresh_token_record(
     user_id: str,
@@ -43,6 +59,10 @@ def create_refresh_token_record(
     return str(result.inserted_id)
 
 
+# ============================================================
+# GET REFRESH TOKEN RECORD
+# ============================================================
+
 def get_refresh_token_record(
     refresh_token: str,
 ):
@@ -58,6 +78,10 @@ def get_refresh_token_record(
         }
     )
 
+
+# ============================================================
+# CHECK REFRESH TOKEN IS ACTIVE
+# ============================================================
 
 def is_refresh_token_active(
     refresh_token: str,
@@ -95,6 +119,10 @@ def is_refresh_token_active(
     return True
 
 
+# ============================================================
+# REVOKE REFRESH TOKEN
+# ============================================================
+
 def revoke_refresh_token(
     refresh_token: str,
 ):
@@ -120,6 +148,10 @@ def revoke_refresh_token(
 
     return result.modified_count > 0
 
+
+# ============================================================
+# REVOKE ALL USER REFRESH TOKENS
+# ============================================================
 
 def revoke_all_user_refresh_tokens(
     user_id: str,

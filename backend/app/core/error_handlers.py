@@ -1,13 +1,25 @@
+# ============================================================
+# IMPORTS
+# ============================================================
+
 import logging
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
 
+# ============================================================
+# LOGGER
+# ============================================================
+
 logger = logging.getLogger(
     "documind_ai"
 )
 
+
+# ============================================================
+# UNHANDLED EXCEPTION HANDLER
+# ============================================================
 
 async def unhandled_exception_handler(
     request: Request,

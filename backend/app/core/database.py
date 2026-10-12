@@ -1,8 +1,16 @@
+# ============================================================
+# IMPORTS
+# ============================================================
+
 from pymongo import MongoClient
 
 
 from app.core.config import settings
 
+
+# ============================================================
+# MONGODB CONNECTION
+# ============================================================
 
 client = MongoClient(
     settings.mongodb_url

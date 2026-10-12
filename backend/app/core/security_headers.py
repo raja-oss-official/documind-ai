@@ -1,6 +1,14 @@
+# ============================================================
+# IMPORTS
+# ============================================================
+
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
+
+# ============================================================
+# SECURITY HEADERS MIDDLEWARE
+# ============================================================
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 

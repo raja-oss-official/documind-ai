@@ -1,5 +1,13 @@
+# ============================================================
+# IMPORTS
+# ============================================================
+
 from app.core.config import settings
 
+
+# ============================================================
+# VECTOR SEARCH ENABLED CHECK
+# ============================================================
 
 def is_vector_search_enabled() -> bool:
     """
@@ -11,6 +19,10 @@ def is_vector_search_enabled() -> bool:
 
     return settings.vector_search_enabled
 
+
+# ============================================================
+# SEARCH WITH VECTOR DATABASE
+# ============================================================
 
 def search_with_vector_database(
     user_id: str,
@@ -50,6 +62,10 @@ def search_with_vector_database(
         "configured yet."
     )
 
+
+# ============================================================
+# VECTOR SEARCH AVAILABILITY
+# ============================================================
 
 def vector_search_available() -> bool:
     """

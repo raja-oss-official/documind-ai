@@ -1,3 +1,7 @@
+# ============================================================
+# IMPORTS
+# ============================================================
+
 from datetime import datetime, timedelta, timezone
 import uuid
 
@@ -12,14 +16,26 @@ from pwdlib import PasswordHash
 from app.core.config import settings
 
 
+# ============================================================
+# PASSWORD HASHER AND BEARER AUTH
+# ============================================================
+
 password_hash = PasswordHash.recommended()
 
 security = HTTPBearer()
 
 
+# ============================================================
+# HASH PASSWORD
+# ============================================================
+
 def hash_password(password: str) -> str:
     return password_hash.hash(password)
 
+
+# ============================================================
+# VERIFY PASSWORD
+# ============================================================
 
 def verify_password(
     password: str,
@@ -30,6 +46,10 @@ def verify_password(
         hashed_password,
     )
 
+
+# ============================================================
+# CREATE ACCESS TOKEN
+# ============================================================
 
 def create_access_token(user_id: str) -> str:
     expire = (
@@ -51,6 +71,10 @@ def create_access_token(user_id: str) -> str:
 
     return token
 
+
+# ============================================================
+# CREATE REFRESH TOKEN
+# ============================================================
 
 def create_refresh_token(user_id: str) -> str:
     expire = (
@@ -75,6 +99,10 @@ def create_refresh_token(user_id: str) -> str:
 
     return token
 
+
+# ============================================================
+# VERIFY ACCESS TOKEN
+# ============================================================
 
 def verify_access_token(
     credentials: HTTPAuthorizationCredentials,
@@ -117,6 +145,10 @@ def verify_access_token(
             detail="Invalid token",
         )
 
+
+# ============================================================
+# VERIFY REFRESH TOKEN
+# ============================================================
 
 def verify_refresh_token(
     refresh_token: str,

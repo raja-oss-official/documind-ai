@@ -1,42 +1,41 @@
-cat > .gitignore <<'EOF'
-# Secrets and environment variables
+# ============================================================
+# SECRETS AND ENVIRONMENT VARIABLES
+# ============================================================
 .env
 .env.*
 !.env.example
 
-# Python virtual environments
+# ============================================================
+# PYTHON VIRTUAL ENVIRONMENTS
+# ============================================================
 .venv/
 venv/
 env/
 
-# Python caches
+# ============================================================
+# PYTHON CACHES
+# ============================================================
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 
-# Test and coverage output
+# ============================================================
+# TEST AND COVERAGE OUTPUT
+# ============================================================
 .coverage
 htmlcov/
 
-# User-uploaded documents and generated data
-backend/uploads/*
-!backend/uploads/.gitkeep
-backend/test_document.txt
+# ============================================================
+# USER-UPLOADED DOCUMENTS AND LOCAL TEST FILES
+# ============================================================
+uploads/*
+!uploads/.gitkeep
+test_document.txt
 
-# Logs
+# ============================================================
+# LOGS AND OPERATING SYSTEM FILES
+# ============================================================
 *.log
-
-# macOS
 .DS_Store
-
-# Frontend dependencies and builds
-frontend/node_modules/
-frontend/dist/
-frontend/.astro/
-
-# Editors
-.vscode/
-.idea/
-EOF

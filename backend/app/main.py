@@ -1,3 +1,7 @@
+# ============================================================
+# IMPORTS
+# ============================================================
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -13,6 +17,10 @@ from app.core.rate_limiter import limiter
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.error_handlers import unhandled_exception_handler
 
+
+# ============================================================
+# API DOCUMENTATION TAGS
+# ============================================================
 
 openapi_tags = [
     {
@@ -50,6 +58,10 @@ openapi_tags = [
 ]
 
 
+# ============================================================
+# FASTAPI APPLICATION
+# ============================================================
+
 app = FastAPI(
     title="DocuMind AI API",
     summary="AI-powered document knowledge assistant",
@@ -86,6 +98,10 @@ Version: 1.0.0
 )
 
 
+# ============================================================
+# EXCEPTION HANDLERS AND RATE LIMITING
+# ============================================================
+
 app.add_exception_handler(
     Exception,
     unhandled_exception_handler,
@@ -99,6 +115,10 @@ app.add_exception_handler(
     _rate_limit_exceeded_handler,
 )
 
+
+# ============================================================
+# MIDDLEWARE (SECURITY HEADERS AND CORS)
+# ============================================================
 
 app.add_middleware(
     SecurityHeadersMiddleware,
@@ -117,6 +137,10 @@ app.add_middleware(
 )
 
 
+# ============================================================
+# HOME ENDPOINT
+# ============================================================
+
 @app.get(
     "/",
     tags=["Health"],
@@ -129,6 +153,10 @@ def home():
         "status": "running",
     }
 
+
+# ============================================================
+# ROUTERS
+# ============================================================
 
 app.include_router(
     health_router,
