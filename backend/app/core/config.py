@@ -21,6 +21,25 @@ class Settings(BaseSettings):
 
     vector_search_enabled: bool = False
 
+    # Comma-separated browser origins allowed to call the API
+    # (e.g. the deployed frontend URL). Defaults to local Vite dev.
+    cors_origins: str = (
+        "http://localhost:5173,"
+        "http://127.0.0.1:5173"
+    )
+
+    # Optional regex for extra origins, e.g. Vercel preview URLs:
+    # https://documind-ai-.*\.vercel\.app
+    cors_origin_regex: str | None = None
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [
+            origin.strip().rstrip("/")
+            for origin in self.cors_origins.split(",")
+            if origin.strip()
+        ]
+
     class Config:
         env_file = ".env"
 

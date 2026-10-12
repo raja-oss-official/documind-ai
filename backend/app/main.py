@@ -13,6 +13,7 @@ from app.routes.search import router as search_router
 from app.routes.documents import router as documents_router
 from app.routes.chats import router as chats_router
 
+from app.core.config import settings
 from app.core.rate_limiter import limiter
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.error_handlers import unhandled_exception_handler
@@ -127,10 +128,8 @@ app.add_middleware(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=settings.cors_origin_list,
+    allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -28,13 +28,14 @@ Developed by **Raja Sundaram R S** · Hexaware Internship Project
 5. [How it works](#how-it-works)
 6. [Project structure](#project-structure)
 7. [Getting started](#getting-started)
-8. [Configuration](#configuration)
-9. [API reference](#api-reference)
-10. [Frontend guide](#frontend-guide)
-11. [Security](#security)
-12. [Testing](#testing)
-13. [Limitations and future work](#limitations-and-future-work)
-14. [Credits](#credits)
+8. [Deployment](#deployment)
+9. [Configuration](#configuration)
+10. [API reference](#api-reference)
+11. [Frontend guide](#frontend-guide)
+12. [Security](#security)
+13. [Testing](#testing)
+14. [Limitations and future work](#limitations-and-future-work)
+15. [Credits](#credits)
 
 ---
 
@@ -174,6 +175,7 @@ Small documents are summarised directly. Large documents use **map-reduce**: chu
 documind-ai/
 ├── README.md                     ← you are here
 ├── .gitignore
+├── render.yaml                   Render blueprint (backend deployment)
 │
 ├── backend/                      FastAPI application
 │   ├── app/
@@ -211,6 +213,7 @@ documind-ai/
 │   ├── tests/                    pytest suite (auth, security, indexes, search, RAG…)
 │   ├── uploads/                  Uploaded files (git-ignored)
 │   ├── requirements.txt
+│   ├── Dockerfile                Container with Tesseract + Poppler for OCR
 │   ├── .env.example              Copy to .env
 │   └── pytest.ini
 │
@@ -297,6 +300,44 @@ npm run build                      # output in frontend/dist
 
 ---
 
+## Deployment
+
+| Part | Platform | Notes |
+|---|---|---|
+| Database | **MongoDB Atlas** (free M0) | Indexes are created automatically when the backend starts |
+| Backend | **Render** (Docker, free plan) | `backend/Dockerfile` installs Tesseract and Poppler for OCR; `render.yaml` is a one-click blueprint |
+| Frontend | **Vercel** | Root Directory `frontend`, framework Vite, env `VITE_API_BASE_URL` |
+
+### 1. Database: MongoDB Atlas
+1. Create a free **M0** cluster at [cloud.mongodb.com](https://cloud.mongodb.com).
+2. **Database Access**: add a user with a password.
+3. **Network Access**: allow `0.0.0.0/0`, because Render's free plan has no fixed IP address.
+4. **Connect → Drivers**: copy the `mongodb+srv://…` connection string.
+
+### 2. Backend: Render
+1. On [render.com](https://render.com), choose **New → Blueprint** and select this repository. `render.yaml` is detected.
+2. Enter `MONGODB_URL` (the Atlas string) and `GEMINI_API_KEY`. `JWT_SECRET_KEY` is generated automatically.
+3. After the deploy, check `https://<service>.onrender.com/api/v1/health`.
+
+`CORS_ORIGINS` lists the frontend URL(s) allowed to call the API (comma-separated). `CORS_ORIGIN_REGEX` optionally allows Vercel preview URLs.
+
+> The free plan sleeps after 15 minutes without traffic, so the first request after that takes about a minute.
+
+### 3. Frontend: Vercel
+1. Import the repository, set **Root Directory** to `frontend` and **Framework** to Vite.
+2. Add the environment variable `VITE_API_BASE_URL=https://<service>.onrender.com/api/v1`.
+3. Deploy. Every push to `main` redeploys the frontend (and the backend on Render).
+
+### Run the backend container locally
+
+```bash
+cd backend
+docker build -t documind-ai-api .
+docker run -p 8000:8000 --env-file .env documind-ai-api
+```
+
+---
+
 ## Configuration
 
 ### Backend (`backend/.env`)
@@ -308,6 +349,8 @@ npm run build                      # output in frontend/dist
 | `JWT_SECRET_KEY` | **yes** | | Secret for signing JWTs. Use a long random value |
 | `GEMINI_API_KEY` | **yes** | | Google Gemini API key |
 | `VECTOR_SEARCH_ENABLED` | no | `false` | Use MongoDB Atlas vector search instead of the local fallback |
+| `CORS_ORIGINS` | no | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated frontend origins allowed to call the API |
+| `CORS_ORIGIN_REGEX` | no | | Optional regex of extra allowed origins (e.g. Vercel previews) |
 
 ### Frontend (`frontend/.env`, optional)
 

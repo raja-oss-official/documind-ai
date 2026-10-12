@@ -1,0 +1,16 @@
+# ============================================================
+# KEEP SECRETS, LOCAL DATA AND CACHES OUT OF THE IMAGE
+# ============================================================
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+uploads/
+tests/
+test_document.txt
+*.log
+.DS_Store
