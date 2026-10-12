@@ -8,6 +8,8 @@
 
 Developed by **Raja Sundaram R S** · Hexaware Internship Project
 
+**Live app:** [documind-ai-wine.vercel.app](https://documind-ai-wine.vercel.app) · **API docs:** [documind-ai-api-83az.onrender.com/docs](https://documind-ai-api-83az.onrender.com/docs)
+
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.142-009688?logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
@@ -301,6 +303,12 @@ npm run build                      # output in frontend/dist
 ---
 
 ## Deployment
+
+| Part | Platform | Live URL |
+|---|---|---|
+| Frontend | **Vercel** | https://documind-ai-wine.vercel.app |
+| Backend | **Render** (Docker) | https://documind-ai-api-83az.onrender.com (docs at `/docs`) |
+| Database | **MongoDB Atlas** (free M0, Mumbai) | Private; the app connects with a least-privilege user |
 
 | Part | Platform | Notes |
 |---|---|---|
