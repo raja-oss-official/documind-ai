@@ -1131,11 +1131,12 @@ textarea {
    ACCOUNT
    ============================================================ */
 
+/* Profile and password cards share one height. */
 .account-grid {
     display: grid;
     grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
     gap: 16px;
-    align-items: start;
+    align-items: stretch;
 }
 
 .profile-card {
@@ -4432,17 +4433,30 @@ a.button {
 /* ============================================================
    YT AI CHAT
    ============================================================ */
+/* Both cards share one height (the taller one sets it). */
 .yt-layout {
     display: grid;
     grid-template-columns: 340px minmax(0, 1fr);
     gap: 18px;
-    align-items: start;
+    align-items: stretch;
+    min-height: 520px;
 }
 
 .yt-sidebar {
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: 14px;
     padding: 18px;
+}
+
+.yt-sidebar .yt-list {
+    flex: 1;
+    align-content: start;
+}
+
+.yt-sidebar .yt-list > .empty-state {
+    height: 100%;
+    align-content: center;
 }
 
 .yt-add {
@@ -4465,10 +4479,23 @@ a.button {
     gap: 8px;
 }
 
+.yt-add-row .text-input,
+.yt-add-row .button {
+    height: 40px;
+    min-height: 40px;
+}
+
 .yt-add-row .text-input {
     min-width: 0;
     flex: 1;
-    min-height: 38px;
+}
+
+/* Fixed width so "Adding..." never pushes out of the card. */
+.yt-add-row .button {
+    width: 104px;
+    flex-shrink: 0;
+    padding: 0 10px;
+    white-space: nowrap;
 }
 
 .yt-list {
@@ -4550,13 +4577,21 @@ a.button {
 }
 
 .yt-main {
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: 12px;
     padding: 18px;
 }
 
+/* Centred, with the normal tight spacing between its lines. */
 .yt-placeholder {
-    min-height: 360px;
+    flex: 1;
+    align-content: center;
+}
+
+.yt-main > .yt-chat {
+    flex: 1;
+    grid-template-rows: minmax(0, 1fr) auto auto;
 }
 
 .yt-player {
@@ -4751,4 +4786,13 @@ a.button {
     .yt-list {
         max-height: none;
     }
+}
+
+/* ============================================================
+   YOUTUBE VIDEO BADGE
+   ============================================================ */
+.file-icon-yt {
+    color: #fff !important;
+    background: #e5302b !important;
+    border-color: #e5302b !important;
 }

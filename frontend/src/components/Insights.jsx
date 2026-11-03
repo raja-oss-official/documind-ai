@@ -1,7 +1,7 @@
 // ============================================================
 // IMPORTS
 // ============================================================
-import { fileExtension } from "../api.js";
+import { fileExtension, isVideo } from "../api.js";
 import Icon from "./Icons.jsx";
 
 // ============================================================
@@ -118,7 +118,9 @@ function Insights({ documents, chats, onOpenDocument }) {
     const maxDay = Math.max(1, ...days.map((day) => day.count));
     const peak = days.reduce((best, day) => (day.count > best.count ? day : best), days[0]);
 
-    const types = countBy(documents, (doc) => fileExtension(doc.filename).replace(".", "").toUpperCase() || "OTHER");
+    const types = countBy(documents, (doc) =>
+        isVideo(doc) ? "YOUTUBE" : fileExtension(doc.filename).replace(".", "").toUpperCase() || "OTHER"
+    );
 
     const names = Object.fromEntries(documents.map((doc) => [doc.id, doc.filename]));
     const discussed = countBy(

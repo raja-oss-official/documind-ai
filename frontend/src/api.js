@@ -97,6 +97,12 @@ function extractErrorMessage(data, status) {
       .join(", ");
   }
 
+  // FastAPI's own "Not Found" means the route does not exist: the
+  // server is running an older version than this app.
+  if (detail === "Not Found" && status === 404) {
+    return "This feature isn't available on the server yet. The backend needs to be redeployed with the latest version.";
+  }
+
   if (typeof detail === "string") {
     return detail;
   }
@@ -109,6 +115,16 @@ function extractErrorMessage(data, status) {
   }
 
   return "The request failed. Please try again.";
+}
+
+// Local development points at FastAPI on this machine; the deployed
+// app talks to a server that sleeps when idle on the free plan.
+function unreachableMessage() {
+  const origin = new URL(API_BASE_URL).origin;
+
+  return /localhost|127\.0\.0\.1/.test(origin)
+    ? `Cannot reach the backend. Make sure FastAPI is running at ${origin}.`
+    : "Can't reach the DocuMind AI server right now. It may be waking up or restarting, which can take up to a minute. Please try again shortly.";
 }
 
 // ============================================================
@@ -145,12 +161,7 @@ async function rawRequest(path, { method = "GET", body, query, auth = true } = {
   try {
     response = await fetch(url, { method, headers, body: requestBody });
   } catch {
-    throw new ApiError(
-      `Cannot reach the backend. Make sure FastAPI is running at ${
-        new URL(API_BASE_URL).origin
-      }.`,
-      0
-    );
+    throw new ApiError(unreachableMessage(), 0);
   }
 
   const data = await response.json().catch(() => ({}));
@@ -371,10 +382,16 @@ export async function getDocumentFile(documentId) {
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
     });
 
-  let response = await fetchFile();
+  let response;
 
-  if (response.status === 401 && (await refreshAccessToken())) {
+  try {
     response = await fetchFile();
+
+    if (response.status === 401 && (await refreshAccessToken())) {
+      response = await fetchFile();
+    }
+  } catch {
+    throw new ApiError(unreachableMessage(), 0);
   }
 
   if (!response.ok) {
@@ -483,10 +500,7 @@ export async function askInChatStream(sessionId, question, onEvent) {
       response = await send();
     }
   } catch {
-    throw new ApiError(
-      `Cannot reach the backend. Make sure FastAPI is running at ${new URL(API_BASE_URL).origin}.`,
-      0
-    );
+    throw new ApiError(unreachableMessage(), 0);
   }
 
   if (response.status === 401) {

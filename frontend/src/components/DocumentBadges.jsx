@@ -30,8 +30,9 @@ export function StatusBadge({ status }) {
 // ============================================================
 // FILE TYPE ICON
 // ============================================================
-export function FileIcon({ filename }) {
-    const extension = fileExtension(filename).replace(".", "").toUpperCase() || "FILE";
+// `video` shows a YouTube badge (videos have a title, not a filename).
+export function FileIcon({ filename, video = false }) {
+    const extension = video ? "YT" : fileExtension(filename).replace(".", "").toUpperCase() || "FILE";
 
     return <div className={`file-icon file-icon-${extension.toLowerCase()}`}>{extension}</div>;
 }

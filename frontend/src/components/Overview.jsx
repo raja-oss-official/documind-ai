@@ -2,7 +2,7 @@
 // IMPORTS
 // ============================================================
 import { useState } from "react";
-import { askDocuments, formatFileSize, formatRelativeTime } from "../api.js";
+import { askDocuments, formatFileSize, formatRelativeTime, formatTimestamp, isVideo } from "../api.js";
 import Icon from "./Icons.jsx";
 import { FileIcon, StatusBadge } from "./DocumentBadges.jsx";
 import SourceList from "./SourceList.jsx";
@@ -223,11 +223,13 @@ function Overview({
                                     key={doc.id}
                                     onClick={() => onOpenDocument(doc.id)}
                                 >
-                                    <FileIcon filename={doc.filename} />
+                                    <FileIcon filename={doc.filename} video={isVideo(doc)} />
                                     <span className="compact-text">
                                         <strong>{doc.filename}</strong>
                                         <span>
-                                            {formatFileSize(doc.file_size)}
+                                            {isVideo(doc)
+                                                ? `YouTube${doc.duration_seconds ? ` · ${formatTimestamp(doc.duration_seconds)}` : ""}`
+                                                : formatFileSize(doc.file_size)}
                                             {doc.page_count ? ` · ${doc.page_count} ${doc.page_count === 1 ? "page" : "pages"}` : ""}
                                             {" · "}
                                             {formatRelativeTime(doc.created_at)}
