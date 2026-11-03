@@ -42,8 +42,14 @@ VIDEO_ID_PATTERN = re.compile(
     r"^[A-Za-z0-9_-]{11}$"
 )
 
+# A line's start time, in any style Gemini writes it:
+#   [00:04] text    00:04 text    (00:04) text    **00:04** text
+#   00:04 - text    [00:04 - 00:10] text    - 1:02:03: text
 TIMESTAMP_PATTERN = re.compile(
-    r"^\[(?:(\d{1,2}):)?(\d{1,2}):(\d{2})\]"
+    r"^[\s*_>-]*[\[(]?"
+    r"(?:(\d{1,2}):)?(\d{1,2}):(\d{2})"
+    r"(?:\s*[-–—]\s*(?:\d{1,2}:)?\d{1,2}:\d{2})?"
+    r"[\])]?[*_]*\s*[-–—:]?\s*"
 )
 
 YOUTUBE_HOSTS = {
@@ -247,6 +253,53 @@ def timestamp_seconds(
     )
 
 
+def format_timestamp(
+    seconds: int
+) -> str:
+    """
+    Seconds as "mm:ss", or "h:mm:ss" after one hour.
+    """
+
+    hours, rest = divmod(
+        seconds,
+        3600
+    )
+
+    minutes, secs = divmod(
+        rest,
+        60
+    )
+
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+
+    return f"{minutes:02d}:{secs:02d}"
+
+
+def normalize_line(
+    line: str
+) -> str | None:
+    """
+    Rewrite a timestamped line to the standard form
+    "[mm:ss] text", or return None when it has no time.
+    """
+
+    match = TIMESTAMP_PATTERN.match(
+        line
+    )
+
+    if not match:
+        return None
+
+    seconds = timestamp_seconds(
+        line
+    )
+
+    text = line[match.end():].strip()
+
+    return f"[{format_timestamp(seconds)}] {text}".strip()
+
+
 # ============================================================
 # TRANSCRIPT TO SEGMENTS
 # ============================================================
@@ -275,15 +328,19 @@ def transcript_segments(
         if not line:
             continue
 
-        if timestamp_seconds(line) is None and lines:
+        normalized = normalize_line(
+            line
+        )
 
-            lines[-1] = f"{lines[-1]} {line}"
-
-        elif timestamp_seconds(line) is not None:
+        if normalized is not None:
 
             lines.append(
-                line
+                normalized
             )
+
+        elif lines:
+
+            lines[-1] = f"{lines[-1]} {line}"
 
     # --------------------------------------------------------
     # Group lines into segments

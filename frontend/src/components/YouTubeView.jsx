@@ -25,6 +25,14 @@ const quickQuestions = [
 ];
 
 // ============================================================
+// TIDY ANSWER
+// ============================================================
+// "its eye [00:55]." reads as "its eye. [00:55]": punctuation goes
+// before the timestamp button instead of floating after it.
+const tidyAnswer = (text) =>
+    text.replace(/\s*(\[(?:\d{1,2}:)?\d{1,2}:\d{2}\])\s*([.!?,;])/g, "$2 $1");
+
+// ============================================================
 // SOURCE TIMESTAMPS
 // ============================================================
 // Each transcript passage starts with its time, e.g. "[01:05] ...".
@@ -168,7 +176,7 @@ function VideoChat({ video, chats, onChatsChanged, onSeek }) {
                         <div className="yt-answer" key={message.id}>
                             <Icon name="sparkles" size={18} gradient strokeWidth={1.7} />
                             <div>
-                                <Markdown text={message.content} onTimestamp={onSeek} />
+                                <Markdown text={tidyAnswer(message.content)} onTimestamp={onSeek} />
                                 {sourceTimes(message.sources).length > 0 && (
                                     <div className="yt-sources">
                                         <span>Sources</span>
@@ -195,7 +203,7 @@ function VideoChat({ video, chats, onChatsChanged, onSeek }) {
                         <Icon name="sparkles" size={18} gradient strokeWidth={1.7} />
                         <div>
                             {streamText ? (
-                                <Markdown text={streamText} onTimestamp={onSeek} />
+                                <Markdown text={tidyAnswer(streamText)} onTimestamp={onSeek} />
                             ) : (
                                 <div className="cb-typing" aria-label="DocuMind AI is thinking">
                                     <span />

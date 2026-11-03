@@ -389,3 +389,34 @@ def test_videos_are_left_out_of_document_search_and_chat():
     ).json()
 
     assert only_video["result_count"] > 0
+
+
+# ============================================================
+# TIMESTAMP STYLES FROM GEMINI
+# ============================================================
+
+def test_every_timestamp_style_is_understood():
+
+    transcript = """
+00:00 [Visual] Text on screen: "facts related to animals"
+00:04 The heart of the blue whale can be heard 3 km away.
+(00:11) Kangaroos keep growing until they die.
+**00:18** If you tickle a rat, it laughs.
+- 00:23 - Snails can sleep for three years.
+[00:30 - 00:35] Elephants cannot jump.
+1:02:03: A late line.
+"""
+
+    segments = transcript_segments(transcript)
+    text = "\n".join(segment["text"] for segment in segments)
+
+    for expected in (
+        "[00:00] [Visual] Text on screen",
+        "[00:04] The heart of the blue whale",
+        "[00:11] Kangaroos",
+        "[00:18] If you tickle a rat",
+        "[00:23] Snails",
+        "[00:30] Elephants",
+        "[1:02:03] A late line.",
+    ):
+        assert expected in text
