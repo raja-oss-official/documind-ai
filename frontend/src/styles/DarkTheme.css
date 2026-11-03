@@ -1,0 +1,154 @@
+/* ============================================================
+   DARK THEME
+   ============================================================
+   Dashboard.css reads its neutral colours from these variables,
+   falling back to the original light values. The dark theme only
+   redefines the variables, plus a few elements whose colours are
+   not variables (inputs, the phone header and tab bar, shared
+   sign-in styles reused on the Account page). Brand blue and the
+   gradients stay the same in both themes. */
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --canvas: #0f1420;
+    --surface: #161c28;
+    --surface-muted: #1b2230;
+    --surface-strong: #232b3a;
+
+    --tint: #1a2540;
+    --tint-soft: #182136;
+    --tint-strong: #22325a;
+    --tint-violet: #241f45;
+    --brand-tint: #1a2540;
+
+    --border: #273042;
+    --border-strong: #364156;
+    --border-tint: #2c3b5e;
+
+    --text: #e6eaf0;
+    --text-secondary: #b3bcc8;
+    --text-muted: #8a94a3;
+    --accent-text: #7cb0ff;
+
+    --danger-bg: #2a1718;
+    --danger-border: #5a2b2c;
+    --danger-text: #ff9b94;
+    --success-bg: #13261c;
+    --success-border: #24503a;
+    --success-text: #6fd59b;
+    --warning-bg: #2b2014;
+    --warning-border: #5a4128;
+    --warning-text: #f0b37e;
+
+    --focus-ring: #24406f;
+    --scrollbar: #364156;
+    --chart-bar: #4f8ff7;
+}
+
+/* ============================================================
+   PAGE AND SELECTION
+   ============================================================ */
+[data-theme="dark"] body {
+    background: var(--canvas);
+}
+
+[data-theme="dark"] ::selection {
+    color: #fff;
+    background: #2b4a85;
+}
+
+/* ============================================================
+   SURFACES WITH GRADIENTS OR TRANSPARENCY
+   ============================================================ */
+[data-theme="dark"] .sidebar {
+    background: var(--surface);
+}
+
+[data-theme="dark"] .topbar {
+    background: rgb(22 28 40 / 88%);
+}
+
+[data-theme="dark"] .cb-scroll {
+    background:
+        radial-gradient(circle at 1px 1px, var(--surface-strong) 1px, transparent 0) 0 0 / 24px 24px,
+        var(--canvas);
+}
+
+[data-theme="dark"] .ask-result .answer-card {
+    background: var(--tint-soft);
+}
+
+[data-theme="dark"] .drop-overlay {
+    background: rgb(15 20 32 / 82%);
+}
+
+/* ============================================================
+   FORM CONTROLS
+   ============================================================ */
+[data-theme="dark"] input,
+[data-theme="dark"] textarea {
+    color: var(--text);
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+    color: var(--text-muted);
+}
+
+[data-theme="dark"] .text-input,
+[data-theme="dark"] .field-group input {
+    background: var(--surface-muted);
+    border-color: var(--border-strong);
+}
+
+[data-theme="dark"] .field-group label {
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .error-alert {
+    color: var(--danger-text);
+    background: var(--danger-bg);
+    border-color: var(--danger-border);
+}
+
+[data-theme="dark"] .success-alert {
+    color: var(--success-text);
+    background: var(--success-bg);
+    border-color: var(--success-border);
+}
+
+/* ============================================================
+   CREDITS AND SMALL BRAND ACCENTS
+   ============================================================ */
+[data-theme="dark"] .credits-author {
+    color: var(--text-muted);
+}
+
+[data-theme="dark"] .credits-author strong {
+    color: var(--text);
+}
+
+[data-theme="dark"] .credits-badge {
+    color: #b8c4ff;
+    background: var(--tint);
+    border-color: var(--border-tint);
+}
+
+[data-theme="dark"] .upload-progress-title span,
+[data-theme="dark"] .cb-suggestion {
+    color: #a5abff;
+}
+
+/* ============================================================
+   PHONE HEADER AND TAB BAR
+   ============================================================ */
+@media (max-width: 650px) {
+    [data-theme="dark"] .sidebar {
+        background: var(--surface);
+    }
+
+    [data-theme="dark"] .navigation {
+        background: rgb(22 28 40 / 96%);
+    }
+}

@@ -15,6 +15,10 @@ import {
     getChatMessages,
     updateChat,
 } from "../api.js";
+import { readJSON, userKey, writeJSON } from "../storage.js";
+import { keyPointQuestions, stripMarkdown } from "../text.js";
+import { readAloudSupported, speak, startDictation, stopSpeaking, voiceInputSupported } from "../speech.js";
+import { chatToMarkdown, downloadTextFile, safeFilename } from "../exportChat.js";
 
 // ============================================================
 // SUGGESTED PROMPTS
@@ -29,6 +33,24 @@ const suggestions = [
 // ============================================================
 // HELPERS
 // ============================================================
+
+// The backend does not store sources with messages, so the sources of
+// answers given in this browser are kept locally (trimmed to fit).
+const MAX_SAVED_ANSWERS = 30;
+const MAX_SAVED_SOURCE_TEXT = 1200;
+
+const sourcesKey = (userId, chatId) => userKey(userId, `sources_${chatId}`);
+
+function trimSources(sourcesByMessage) {
+    return Object.fromEntries(
+        Object.entries(sourcesByMessage)
+            .slice(-MAX_SAVED_ANSWERS)
+            .map(([messageId, sources]) => [
+                messageId,
+                sources.map((source) => ({ ...source, text: (source.text || "").slice(0, MAX_SAVED_SOURCE_TEXT) })),
+            ])
+    );
+}
 
 function parseDate(value) {
     const text = String(value || "");
@@ -94,6 +116,9 @@ function TypedAnswer({ text, onProgress, onDone }) {
 
 function Conversation({
     initialChatId,
+    userId,
+    pendingPrompt,
+    onPromptConsumed,
     chats,
     documents,
     onChatCreated,
@@ -109,7 +134,9 @@ function Conversation({
     const [chatId, setChatId] = useState(initialChatId);
     const [messages, setMessages] = useState([]);
     const [loading, setLoading] = useState(Boolean(initialChatId));
-    const [sourcesByMessage, setSourcesByMessage] = useState({});
+    const [sourcesByMessage, setSourcesByMessage] = useState(() =>
+        initialChatId ? readJSON(sourcesKey(userId, initialChatId), {}) : {}
+    );
     const [animatingId, setAnimatingId] = useState(null);
     const [question, setQuestion] = useState("");
     const [pendingQuestion, setPendingQuestion] = useState("");
@@ -120,17 +147,22 @@ function Conversation({
     const [renameTitle, setRenameTitle] = useState("");
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [copiedId, setCopiedId] = useState(null);
+    const [listening, setListening] = useState(false);
+    const [speakingId, setSpeakingId] = useState(null);
 
     // ============================================================
     // REFS AND DERIVED VALUES
     // ============================================================
     const scrollRef = useRef(null);
     const inputRef = useRef(null);
+    const stopDictationRef = useRef(null);
+    const handledPromptRef = useRef(false);
 
     const chat = chats.find((item) => item.id === chatId);
     const readyDocuments = documents.filter((doc) => doc.status === "completed");
     const hasReadyDocuments = readyDocuments.length > 0;
     const showWelcome = !loading && messages.length === 0 && !pendingQuestion;
+    const documentNames = Object.fromEntries(documents.map((doc) => [doc.id, doc.filename]));
 
     // ============================================================
     // SCROLLING
@@ -169,7 +201,23 @@ function Conversation({
 
     useEffect(() => {
         inputRef.current?.focus();
+
+        // Stop the microphone and any reading when leaving the chat.
+        return () => {
+            stopDictationRef.current?.();
+            stopSpeaking();
+        };
     }, []);
+
+    // ============================================================
+    // REMEMBER ANSWER SOURCES IN THIS BROWSER
+    // ============================================================
+    useEffect(() => {
+        if (chatId && Object.keys(sourcesByMessage).length > 0) {
+            writeJSON(sourcesKey(userId, chatId), trimSources(sourcesByMessage));
+        }
+    }, [chatId, sourcesByMessage, userId]);
+
 
     // ============================================================
     // COMPOSER INPUT
@@ -252,6 +300,21 @@ function Conversation({
     };
 
     // ============================================================
+    // QUESTION SENT FROM ANOTHER PAGE
+    // ============================================================
+    // e.g. "Ask" next to a key point on the document page.
+    useEffect(() => {
+        if (loading || !pendingPrompt || handledPromptRef.current) {
+            return;
+        }
+
+        handledPromptRef.current = true;
+        onPromptConsumed();
+        send(pendingPrompt.text);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [loading]);
+
+    // ============================================================
     // SAVE A NOTE
     // ============================================================
     const saveNote = async () => {
@@ -315,6 +378,7 @@ function Conversation({
     const remove = async () => {
         try {
             await deleteChat(chatId);
+            writeJSON(sourcesKey(userId, chatId), null);
             await onDeleted();
         } catch (err) {
             setError(err.message);
@@ -335,6 +399,64 @@ function Conversation({
     };
 
     // ============================================================
+    // READ ANSWER ALOUD
+    // ============================================================
+    const toggleSpeak = (message) => {
+        if (speakingId === message.id) {
+            stopSpeaking();
+            setSpeakingId(null);
+            return;
+        }
+
+        setSpeakingId(message.id);
+        speak(stripMarkdown(message.content), {
+            onEnd: () => setSpeakingId((current) => (current === message.id ? null : current)),
+        });
+    };
+
+    // ============================================================
+    // VOICE INPUT
+    // ============================================================
+    // Dictated words are added after anything already typed.
+    const toggleDictation = () => {
+        if (listening) {
+            stopDictationRef.current?.();
+            return;
+        }
+
+        const typed = question.trim();
+        setError("");
+        setListening(true);
+
+        stopDictationRef.current = startDictation({
+            onText: (spoken) => {
+                setQuestion(typed ? `${typed} ${spoken}` : spoken);
+                requestAnimationFrame(resizeInput);
+            },
+            onEnd: () => {
+                setListening(false);
+                stopDictationRef.current = null;
+                inputRef.current?.focus();
+            },
+            onError: setError,
+        });
+    };
+
+    // ============================================================
+    // EXPORT (MARKDOWN AND PRINT / PDF)
+    // ============================================================
+    const exportMarkdown = () => {
+        const scopeLabel = chat?.document_id
+            ? documentNames[chat.document_id] || "Linked document"
+            : "All documents";
+
+        downloadTextFile(
+            safeFilename(chat?.title, "md"),
+            chatToMarkdown({ title: chat?.title, scopeLabel, messages, sourcesByMessage, documentNames })
+        );
+    };
+
+    // ============================================================
     // RENDER
     // ============================================================
     const currentScope = chatId ? chat?.document_id || "" : scope;
@@ -342,6 +464,14 @@ function Conversation({
         ...(chatId && chat?.document_id ? [] : [{ value: "", label: "All documents" }]),
         ...readyDocuments.map((doc) => ({ value: doc.id, label: doc.filename })),
     ];
+
+    // A chat about one summarised document suggests questions from its key points.
+    const scopeDocument = readyDocuments.find((doc) => doc.id === currentScope);
+    const documentSuggestions = keyPointQuestions(scopeDocument?.key_points).map((item) => ({
+        ...item,
+        icon: "sparkles",
+    }));
+    const welcomeSuggestions = documentSuggestions.length > 0 ? documentSuggestions : suggestions;
 
     return (
         <section className="cb-main">
@@ -409,6 +539,24 @@ function Conversation({
                             </>
                         ) : (
                             <>
+                                {messages.length > 0 && (
+                                    <>
+                                        <button
+                                            className="cb-icon-button"
+                                            title="Download chat (Markdown)"
+                                            onClick={exportMarkdown}
+                                        >
+                                            <Icon name="download" size={15} />
+                                        </button>
+                                        <button
+                                            className="cb-icon-button"
+                                            title="Print or save as PDF"
+                                            onClick={() => window.print()}
+                                        >
+                                            <Icon name="printer" size={15} />
+                                        </button>
+                                    </>
+                                )}
                                 <button
                                     className="cb-icon-button"
                                     title="Rename chat"
@@ -457,9 +605,15 @@ function Conversation({
                                 : "Upload a document first, then ask me anything about it."}
                         </p>
 
+                        {hasReadyDocuments && documentSuggestions.length > 0 && (
+                            <div className="cb-suggestions-label">
+                                Suggested from the key points of {scopeDocument.filename}
+                            </div>
+                        )}
+
                         {hasReadyDocuments ? (
                             <div className="cb-suggestions">
-                                {suggestions.map((item) => (
+                                {welcomeSuggestions.map((item) => (
                                     <button
                                         key={item.title}
                                         className="cb-suggestion"
@@ -485,7 +639,7 @@ function Conversation({
                     ============================================================ */}
                 {!showWelcome && (
                     <div className="cb-thread">
-                        {messages.map((message) =>
+                        {messages.map((message, index) =>
                             message.role === "assistant" ? (
                                 <div className="cb-row cb-row-assistant" key={message.id}>
                                     <span className="cb-avatar">
@@ -518,6 +672,11 @@ function Conversation({
                                                             sources={sourcesByMessage[message.id]}
                                                             documents={documents}
                                                             onOpenDocument={onOpenDocument}
+                                                            highlight={
+                                                                messages
+                                                                    .slice(0, index)
+                                                                    .findLast((item) => item.role === "user")?.content
+                                                            }
                                                             compact
                                                         />
                                                     </details>
@@ -527,6 +686,15 @@ function Conversation({
                                                         <Icon name={copiedId === message.id ? "checkMark" : "copy"} size={13} />
                                                         {copiedId === message.id ? "Copied" : "Copy"}
                                                     </button>
+                                                    {readAloudSupported && (
+                                                        <button
+                                                            onClick={() => toggleSpeak(message)}
+                                                            title={speakingId === message.id ? "Stop reading" : "Read aloud"}
+                                                        >
+                                                            <Icon name={speakingId === message.id ? "stop" : "volume"} size={13} />
+                                                            {speakingId === message.id ? "Stop" : "Listen"}
+                                                        </button>
+                                                    )}
                                                     <span>{formatMessageTime(message.created_at)}</span>
                                                 </div>
                                             </>
@@ -595,6 +763,7 @@ function Conversation({
                     </button>
                     <textarea
                         ref={inputRef}
+                        data-shortcut-focus
                         rows={1}
                         value={question}
                         onChange={(event) => {
@@ -608,11 +777,27 @@ function Conversation({
                             }
                         }}
                         placeholder={
-                            hasReadyDocuments ? "Message DocuMind AI..." : "Upload a document to start chatting"
+                            listening
+                                ? "Listening..."
+                                : hasReadyDocuments
+                                    ? "Message DocuMind AI..."
+                                    : "Upload a document to start chatting"
                         }
                         maxLength={5000}
                         disabled={!hasReadyDocuments || busy === "ask"}
                     />
+                    {voiceInputSupported && (
+                        <button
+                            type="button"
+                            className={`cb-icon-button ${listening ? "is-listening" : ""}`}
+                            onClick={toggleDictation}
+                            disabled={!hasReadyDocuments || busy === "ask"}
+                            title={listening ? "Stop voice input" : "Voice input"}
+                            aria-pressed={listening}
+                        >
+                            <Icon name="mic" size={17} />
+                        </button>
+                    )}
                     <button
                         type="button"
                         className="cb-icon-button"
@@ -645,6 +830,9 @@ function Conversation({
 // ============================================================
 
 function ChatView({
+    userId,
+    pendingPrompt,
+    onPromptConsumed,
     chats,
     documents,
     activeChatId,
@@ -738,6 +926,9 @@ function ChatView({
             <Conversation
                 key={conversationKey}
                 initialChatId={conversationKey.startsWith("new-") ? null : conversationKey}
+                userId={userId}
+                pendingPrompt={pendingPrompt?.chatId === conversationKey ? pendingPrompt : null}
+                onPromptConsumed={onPromptConsumed}
                 chats={chats}
                 documents={documents}
                 onChatCreated={async (chat) => {

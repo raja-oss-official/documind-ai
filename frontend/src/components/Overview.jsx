@@ -6,6 +6,7 @@ import { askDocuments, formatFileSize, formatRelativeTime } from "../api.js";
 import Icon from "./Icons.jsx";
 import { FileIcon, StatusBadge } from "./DocumentBadges.jsx";
 import SourceList from "./SourceList.jsx";
+import Insights from "./Insights.jsx";
 
 // ============================================================
 // DASHBOARD OVERVIEW
@@ -141,6 +142,7 @@ function Overview({
                                 : "Upload a document to start asking questions"
                         }
                         maxLength={5000}
+                        data-shortcut-focus
                         disabled={!readyDocuments.length}
                     />
                     <button
@@ -182,6 +184,7 @@ function Overview({
                                     sources={answer.sources}
                                     documents={documents}
                                     onOpenDocument={onOpenDocument}
+                                    highlight={answer.question}
                                     compact
                                 />
                             </details>
@@ -302,6 +305,11 @@ function Overview({
                     )}
                 </div>
             </div>
+
+            {/* ============================================================
+                WORKSPACE INSIGHTS
+                ============================================================ */}
+            {!loading && <Insights documents={documents} chats={chats} onOpenDocument={onOpenDocument} />}
         </>
     );
 }

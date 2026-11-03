@@ -12,6 +12,7 @@ import {
     renameDocument,
 } from "../api.js";
 import { FileIcon, StatusBadge } from "./DocumentBadges.jsx";
+import { keyPointQuestions } from "../text.js";
 
 // ============================================================
 // PROCESSING TYPE LABELS
@@ -30,7 +31,7 @@ const processingLabels = {
 // ============================================================
 // DOCUMENT DETAILS
 // ============================================================
-function DocumentDetails({ document, onBack, onChanged, onDeleted, onSearch, onChatCreated }) {
+function DocumentDetails({ document, onBack, onChanged, onDeleted, onSearch, onChatCreated, onAsk }) {
     // ============================================================
     // STATE
     // ============================================================
@@ -288,12 +289,30 @@ function DocumentDetails({ document, onBack, onChanged, onDeleted, onSearch, onC
                                     <ul className="key-points">
                                         {keyPoints.map((point, index) => (
                                             <li key={index}>
-                                                {typeof point === "string"
-                                                    ? point
-                                                    : JSON.stringify(point)}
+                                                <span>
+                                                    {typeof point === "string"
+                                                        ? point
+                                                        : JSON.stringify(point)}
+                                                </span>
+                                                {typeof point === "string" && isReady && (
+                                                    <button
+                                                        className="link-button key-point-ask"
+                                                        onClick={() =>
+                                                            run("chat", () => onAsk(keyPointQuestions([point])[0]))
+                                                        }
+                                                        disabled={Boolean(busy)}
+                                                        title="Open a chat about this point"
+                                                    >
+                                                        <Icon name="chat" size={13} /> Ask
+                                                    </button>
+                                                )}
                                             </li>
                                         ))}
                                     </ul>
+                                    <p className="muted key-points-hint">
+                                        Select <strong>Ask</strong> to open a chat about a point with the answer
+                                        drawn from this document.
+                                    </p>
                                 </>
                             )}
                         </>

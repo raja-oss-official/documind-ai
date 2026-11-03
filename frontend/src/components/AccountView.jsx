@@ -19,7 +19,7 @@ const passwordRules = [
 // ============================================================
 // ACCOUNT PAGE
 // ============================================================
-function AccountView({ user, documentCount, chatCount, onPasswordChanged, onSignOut }) {
+function AccountView({ user, documentCount, chatCount, theme, onToggleTheme, onPasswordChanged, onSignOut }) {
     // ============================================================
     // STATE
     // ============================================================
@@ -83,6 +83,31 @@ function AccountView({ user, documentCount, chatCount, onPasswordChanged, onSign
                     <div>
                         <span>Chat sessions</span>
                         <strong>{chatCount}</strong>
+                    </div>
+                </div>
+
+                {/* ============================================================
+                    APPEARANCE
+                    ============================================================ */}
+                <div className="appearance-row">
+                    <div>
+                        <strong>Appearance</strong>
+                        <p className="muted">Saved in this browser.</p>
+                    </div>
+                    <div className="segmented" role="group" aria-label="Theme">
+                        {[
+                            { value: "light", label: "Light", icon: "sun" },
+                            { value: "dark", label: "Dark", icon: "moon" },
+                        ].map((option) => (
+                            <button
+                                key={option.value}
+                                className={theme === option.value ? "active" : ""}
+                                onClick={() => theme !== option.value && onToggleTheme()}
+                                aria-pressed={theme === option.value}
+                            >
+                                <Icon name={option.icon} size={14} /> {option.label}
+                            </button>
+                        ))}
                     </div>
                 </div>
 

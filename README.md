@@ -60,7 +60,7 @@ Every document, chunk, chat and search is scoped to the signed-in user.
 ## Features
 
 ### Documents
-- Upload **PDF, DOCX, TXT, CSV, XLSX, PPTX, PNG, JPG/JPEG** (up to 10 MB each), by button or drag and drop.
+- Upload **PDF, DOCX, TXT, CSV, XLSX, PPTX, PNG, JPG/JPEG** (up to 10 MB each), by button or drag and drop, several at once with a status row per file.
 - File-signature validation, safe filenames and per-user storage.
 - Automatic **OCR** for scanned PDFs and images (Tesseract).
 - Per-document statistics: pages, words, characters, chunks, processing type.
@@ -72,13 +72,18 @@ Every document, chunk, chat and search is scoped to the signed-in user.
 - Contextual neighbour boosting, so passages next to strong matches rank higher.
 - Filter by document, choose 5 / 10 / 20 results, and see the match score with a meaning/keyword breakdown.
 - **Ask AI**: a written answer from all documents with its sources.
+- **View passage**: open any source to read the full passage with your question's words highlighted.
+- Recent and saved (starred) searches, kept in the browser per user.
 
 ### AI chat (chatbot experience)
 - Conversations with history, grouped by Today / Yesterday / Previous 7 days / Older, plus search.
 - A chat can be linked to one document or ask across all documents.
 - **Whole-document context** for small documents and broad questions ("summarize", "key points", "explain this pdf"), so answers are complete and accurate.
 - ChatGPT-style answers: headings, lists, tables and code blocks with copy buttons, revealed word by word.
-- Suggested prompts, typing indicator, copy answer, save a note without asking the AI, rename and delete chats.
+- Suggested prompts (taken from a document's summary key points when the chat is about one document), typing indicator, copy answer, save a note without asking the AI, rename and delete chats.
+- **Ask** next to a key point on a document page opens a chat about it.
+- Export a chat as Markdown, or print / save it as PDF.
+- Voice input and read-aloud answers (browser speech features, where supported).
 
 ### Accounts and security
 - Register / sign in with strong-password rules.
@@ -90,6 +95,9 @@ Every document, chunk, chat and search is scoped to the signed-in user.
 - Responsive React app: desktop sidebar, tablet layout, and a **phone app shell** with sticky header and bottom tab bar.
 - Brand theme taken from the DocuMind AI logo (blue to violet gradient), sharp-edged design, Inter typography.
 - Custom dropdowns, upload progress card, loading screen, empty states and keyboard support.
+- **Dark mode** (top bar or Account page, remembered per browser).
+- **Keyboard shortcuts**: `Ctrl/⌘ K` search, `/` focus, `N` new chat, `U` upload, `1`-`5` pages, `T` theme, `?` help.
+- **Workspace insights** on the dashboard: uploads over 14 days, documents by type, most discussed documents.
 
 ---
 
@@ -485,7 +493,7 @@ npm run build
 ## Limitations and future work
 
 - Answers are generated in one request, so the word-by-word reveal in chat is visual, not true streaming.
-- Answer sources are returned with each answer but not stored with chat messages, so they are not shown for older messages.
+- Answer sources are returned with each answer but not stored with chat messages by the backend. The frontend keeps them in the browser, so they are shown again on the same browser, but not on another device or after signing out.
 - Text extraction normalises whitespace, so code indentation inside uploaded documents is flattened.
 - A chat can be moved to another document but not unlinked back to "All documents".
 - Possible next steps: streaming responses, saved sources, background processing for very large uploads, sharing and team workspaces.

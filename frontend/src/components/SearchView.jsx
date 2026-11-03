@@ -6,11 +6,21 @@ import Icon from "./Icons.jsx";
 import Select from "./Select.jsx";
 import { askDocuments, searchDocuments } from "../api.js";
 import SourceList from "./SourceList.jsx";
+import { readJSON, userKey, writeJSON } from "../storage.js";
+
+// ============================================================
+// SEARCH HISTORY
+// ============================================================
+// Recent and saved searches are kept in this browser, per user.
+const MAX_RECENT = 8;
+
+const sameSearch = (a, b) =>
+    a.query.toLowerCase() === b.query.toLowerCase() && a.documentId === b.documentId && a.mode === b.mode;
 
 // ============================================================
 // AI SEARCH PAGE
 // ============================================================
-function SearchView({ documents, pendingSearch, onPendingConsumed, onOpenDocument }) {
+function SearchView({ userId, documents, pendingSearch, onPendingConsumed, onOpenDocument }) {
     // ============================================================
     // STATE
     // ============================================================
@@ -23,14 +33,51 @@ function SearchView({ documents, pendingSearch, onPendingConsumed, onOpenDocumen
     const [answer, setAnswer] = useState(null);
     const handledSearchId = useRef(null);
 
+    const recentKey = userKey(userId, "recent_searches");
+    const savedKey = userKey(userId, "saved_searches");
+    const [recent, setRecent] = useState(() => readJSON(recentKey, []));
+    const [saved, setSaved] = useState(() => readJSON(savedKey, []));
+
     const completedDocuments = documents.filter((doc) => doc.status === "completed");
+    const documentNames = Object.fromEntries(documents.map((doc) => [doc.id, doc.filename]));
+
+    // ============================================================
+    // RECENT AND SAVED SEARCHES
+    // ============================================================
+    const remember = (entry) =>
+        setRecent((current) => {
+            const next = [entry, ...current.filter((item) => !sameSearch(item, entry))].slice(0, MAX_RECENT);
+            writeJSON(recentKey, next);
+            return next;
+        });
+
+    const forget = (entry) =>
+        setRecent((current) => {
+            const next = current.filter((item) => !sameSearch(item, entry));
+            writeJSON(recentKey, next);
+            return next;
+        });
+
+    const toggleSaved = (entry) =>
+        setSaved((current) => {
+            const next = current.some((item) => sameSearch(item, entry))
+                ? current.filter((item) => !sameSearch(item, entry))
+                : [entry, ...current];
+            writeJSON(savedKey, next);
+            return next;
+        });
+
+    const isSaved = (entry) => saved.some((item) => sameSearch(item, entry));
 
     // ============================================================
     // SEARCH AND ASK
     // ============================================================
     const fetchResults = (searchQuery, searchDocumentId) =>
         searchDocuments({ query: searchQuery, documentId: searchDocumentId, limit })
-            .then(setResults)
+            .then((data) => {
+                setResults(data);
+                remember({ query: searchQuery, documentId: searchDocumentId || "", mode: "search" });
+            })
             .catch((err) => {
                 setError(err.message);
                 setResults(null);
@@ -44,18 +91,30 @@ function SearchView({ documents, pendingSearch, onPendingConsumed, onOpenDocumen
         fetchResults(searchQuery, searchDocumentId);
     };
 
-    const runAsk = async () => {
+    const runAsk = async (askQuery = query.trim()) => {
         setLoading("ask");
         setError("");
         setResults(null);
 
         try {
-            setAnswer(await askDocuments(query.trim()));
+            setAnswer(await askDocuments(askQuery));
+            remember({ query: askQuery, documentId: "", mode: "ask" });
         } catch (err) {
             setError(err.message);
             setAnswer(null);
         } finally {
             setLoading("");
+        }
+    };
+
+    const rerun = (entry) => {
+        setQuery(entry.query);
+        setDocumentId(entry.documentId);
+
+        if (entry.mode === "ask") {
+            runAsk(entry.query);
+        } else {
+            runSearch(entry.query, entry.documentId);
         }
     };
 
@@ -110,6 +169,7 @@ function SearchView({ documents, pendingSearch, onPendingConsumed, onOpenDocumen
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder="What are you looking for?"
                     maxLength={500}
+                    data-shortcut-focus
                     autoFocus
                 />
                 <button className="button button-primary" type="submit" disabled={!canSubmit}>
@@ -118,7 +178,7 @@ function SearchView({ documents, pendingSearch, onPendingConsumed, onOpenDocumen
                 <button
                     className="button"
                     type="button"
-                    onClick={runAsk}
+                    onClick={() => runAsk()}
                     disabled={!canSubmit}
                     title="Answer from all documents"
                 >
@@ -154,6 +214,60 @@ function SearchView({ documents, pendingSearch, onPendingConsumed, onOpenDocumen
             </div>
 
             {/* ============================================================
+                SAVED AND RECENT SEARCHES
+                ============================================================ */}
+            {[
+                { label: "Saved", items: saved },
+                { label: "Recent", items: recent.filter((item) => !isSaved(item)) },
+            ].map(
+                (group) =>
+                    group.items.length > 0 && (
+                        <div className="search-history" key={group.label}>
+                            <span className="search-history-label">
+                                <Icon name={group.label === "Saved" ? "star" : "clock"} size={13} /> {group.label}
+                            </span>
+                            {group.items.map((entry) => (
+                                <span
+                                    className={`history-chip ${isSaved(entry) ? "is-saved" : ""}`}
+                                    key={`${entry.mode}-${entry.documentId}-${entry.query}`}
+                                >
+                                    <button
+                                        className="history-chip-run"
+                                        onClick={() => rerun(entry)}
+                                        disabled={Boolean(loading)}
+                                        title={entry.mode === "ask" ? "Ask AI again" : "Search again"}
+                                    >
+                                        <Icon name={entry.mode === "ask" ? "sparkles" : "search"} size={12} />
+                                        <span>{entry.query}</span>
+                                        {entry.documentId && (
+                                            <small>in {documentNames[entry.documentId] || "a document"}</small>
+                                        )}
+                                    </button>
+                                    <button
+                                        className="history-chip-action"
+                                        onClick={() => toggleSaved(entry)}
+                                        title={isSaved(entry) ? "Remove from saved" : "Save this search"}
+                                        aria-label={isSaved(entry) ? "Remove from saved" : "Save this search"}
+                                    >
+                                        <Icon name="star" size={12} />
+                                    </button>
+                                    {!isSaved(entry) && (
+                                        <button
+                                            className="history-chip-action"
+                                            onClick={() => forget(entry)}
+                                            title="Remove from recent"
+                                            aria-label="Remove from recent"
+                                        >
+                                            <Icon name="close" size={12} />
+                                        </button>
+                                    )}
+                                </span>
+                            ))}
+                        </div>
+                    )
+            )}
+
+            {/* ============================================================
                 ERROR AND LOADING
                 ============================================================ */}
             {error && (
@@ -187,6 +301,7 @@ function SearchView({ documents, pendingSearch, onPendingConsumed, onOpenDocumen
                                 sources={answer.sources}
                                 documents={documents}
                                 onOpenDocument={onOpenDocument}
+                                highlight={answer.question}
                                 compact
                             />
                         </>
@@ -213,6 +328,7 @@ function SearchView({ documents, pendingSearch, onPendingConsumed, onOpenDocumen
                             sources={results.results}
                             documents={documents}
                             onOpenDocument={onOpenDocument}
+                            highlight={results.query}
                         />
                     )}
                 </div>

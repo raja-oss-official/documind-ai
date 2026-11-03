@@ -16,6 +16,7 @@ import {
   onSessionExpired,
   registerUser,
 } from "./api.js";
+import { clearUserData } from "./storage.js";
 
 // ============================================================
 // APP: AUTHENTICATION AND SESSION
@@ -100,6 +101,8 @@ function App() {
   // ============================================================
   async function handleLogout(notice = "") {
     await logoutUser();
+    // Saved sources and search history belong to this user only.
+    clearUserData();
     setUser(null);
     setPage("login");
     setPassword("");
