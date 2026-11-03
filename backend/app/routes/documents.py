@@ -10,6 +10,7 @@ from bson import ObjectId
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     File,
     HTTPException,
@@ -33,9 +34,23 @@ from app.services.chat_rag_service import (
     ask_document_question,
 )
 
-from app.services.chunk_service import (
-    chunk_pages,
-    save_chunks,
+from app.services.access_service import (
+    get_accessible_document,
+    role_allows,
+    shared_document_ids,
+)
+from app.services.document_processing_service import (
+    process_document,
+)
+from app.services.large_document_summary_service import (
+    generate_large_document_summary_result,
+)
+from app.services.rag_service import (
+    load_document_chunks,
+)
+from app.services.file_storage_service import (
+    delete_original_file,
+    store_original_file,
 )
 
 from app.services.document_intelligence_service import (
@@ -50,9 +65,6 @@ from app.services.document_service import (
     update_document_summary,
 )
 
-from app.services.file_extraction_service import (
-    extract_text_from_file,
-)
 
 from app.services.search_service import (
     search_documents,
@@ -73,6 +85,10 @@ router = APIRouter()
 UPLOAD_DIR = "uploads"
 
 MAX_FILE_SIZE = 10 * 1024 * 1024
+
+
+# Documents longer than this are summarized with map-reduce.
+DIRECT_SUMMARY_LIMIT = 30000
 
 
 # ============================================================
@@ -142,6 +158,46 @@ def get_current_user(
     return verify_access_token(
         credentials
     )
+
+
+# ============================================================
+# SHARING FIELDS (ROLE AND OWNER)
+# ============================================================
+
+def sharing_fields(
+    document: dict,
+    user_id: str,
+):
+
+    """
+    Role and owner details added to document responses so
+    the frontend can label shared documents and hide
+    actions the user may not take.
+    """
+
+    shared = document.get("owner_id") != user_id
+    owner_name = None
+
+    if shared and ObjectId.is_valid(
+        document.get("owner_id") or ""
+    ):
+
+        owner = db.users.find_one(
+            {
+                "_id": ObjectId(document["owner_id"]),
+            },
+            {
+                "name": 1,
+            },
+        )
+
+        owner_name = owner.get("name") if owner else None
+
+    return {
+        "role": document.get("role", "owner"),
+        "shared": shared,
+        "owner_name": owner_name,
+    }
 
 
 # ============================================================
@@ -338,6 +394,8 @@ def search_user_documents(
 @router.post("/upload")
 async def upload_document(
 
+    background_tasks: BackgroundTasks,
+
     file: UploadFile = File(...),
 
     credentials: HTTPAuthorizationCredentials = Depends(
@@ -508,11 +566,11 @@ async def upload_document(
 
     )
 
-    try:
+    # --------------------------------------------------------
+    # Save physical file
+    # --------------------------------------------------------
 
-        # ----------------------------------------------------
-        # Save physical file
-        # ----------------------------------------------------
+    try:
 
         with open(
             storage_path,
@@ -523,227 +581,10 @@ async def upload_document(
                 file_content
             )
 
-        # ----------------------------------------------------
-        # Extract text
-        # ----------------------------------------------------
-
-        extraction_result = (
-            extract_text_from_file(
-                storage_path,
-                extension,
-            )
-        )
-
-        extracted_text = (
-            extraction_result.get(
-                "text",
-                "",
-            )
-        )
-
-        pages = extraction_result.get(
-            "pages",
-            [],
-        )
-
-        page_count = extraction_result.get(
-            "page_count",
-            0,
-        )
-
-        is_scanned = extraction_result.get(
-            "is_scanned",
-            False,
-        )
-
-        # ----------------------------------------------------
-        # Determine processing type
-        # ----------------------------------------------------
-
-        if extension == ".pdf":
-
-            if is_scanned:
-
-                processing_type = "ocr_pdf"
-
-            else:
-
-                processing_type = "text_pdf"
-
-        elif extension == ".docx":
-
-            processing_type = "docx"
-
-        elif extension == ".txt":
-
-            processing_type = "txt"
-
-        elif extension == ".csv":
-
-            processing_type = "csv"
-
-        elif extension == ".xlsx":
-
-            processing_type = "xlsx"
-
-        elif extension == ".pptx":
-
-            processing_type = "pptx"
-
-        elif extension in {
-            ".png",
-            ".jpg",
-            ".jpeg",
-        }:
-
-            processing_type = "image_ocr"
-
-        else:
-
-            processing_type = extension.replace(
-                ".",
-                "",
-            )
-
-        # ----------------------------------------------------
-        # Make sure text was extracted
-        # ----------------------------------------------------
-
-        if not extracted_text.strip():
-
-            update_document_status(
-
-                document_id=document_id,
-
-                user_id=user_id,
-
-                status="failed",
-
-                processing_error=(
-                    "No readable text was found "
-                    "in the uploaded file"
-                ),
-
-            )
-
-            return {
-
-                "id": document_id,
-
-                "filename": original_filename,
-
-                "status": "failed",
-
-                "message": (
-                    "No readable text was found "
-                    "in the uploaded file"
-                ),
-
-            }
-
-        # ----------------------------------------------------
-        # Create chunks
-        # ----------------------------------------------------
-
-        chunks = chunk_pages(
-            pages
-        )
-
-        # ----------------------------------------------------
-        # Save chunks and embeddings
-        # ----------------------------------------------------
-
-        saved_chunk_count = save_chunks(
-
-            document_id=document_id,
-
-            user_id=user_id,
-
-            chunks=chunks,
-
-        )
-
-        # ----------------------------------------------------
-        # Calculate statistics
-        # ----------------------------------------------------
-
-        character_count = len(
-            extracted_text
-        )
-
-        word_count = len(
-            extracted_text.split()
-        )
-
-        # ----------------------------------------------------
-        # Update document
-        # ----------------------------------------------------
-
-        db.documents.update_one(
-
-            {
-                "_id": ObjectId(document_id),
-                "user_id": user_id,
-            },
-
-            {
-                "$set": {
-
-                    "extracted_text": extracted_text,
-
-                    "page_count": page_count,
-
-                    "chunk_count": saved_chunk_count,
-
-                    "character_count": character_count,
-
-                    "word_count": word_count,
-
-                    "processing_type": processing_type,
-
-                    "processing_error": None,
-
-                    "status": "completed",
-
-                    "storage_filename": storage_filename,
-
-                }
-            },
-
-        )
-
-        # ----------------------------------------------------
-        # Return successful response
-        # ----------------------------------------------------
-
-        return {
-
-            "id": document_id,
-
-            "filename": original_filename,
-
-            "file_type": file_type,
-
-            "file_size": len(file_content),
-
-            "status": "completed",
-
-            "processing_type": processing_type,
-
-            "page_count": page_count,
-
-            "chunk_count": saved_chunk_count,
-
-            "character_count": character_count,
-
-            "word_count": word_count,
-
-        }
-
-    except Exception as error:
+    except OSError as error:
 
         print(
-            "Document processing failed:"
+            "Unable to save uploaded file:"
         )
 
         print(error)
@@ -756,7 +597,7 @@ async def upload_document(
 
             status="failed",
 
-            processing_error=str(error),
+            processing_error="The file could not be saved",
 
         )
 
@@ -766,9 +607,72 @@ async def upload_document(
                 status.HTTP_500_INTERNAL_SERVER_ERROR
             ),
 
-            detail="Document processing failed",
+            detail="Unable to save the uploaded file",
 
         )
+
+    # --------------------------------------------------------
+    # Keep the original for previews (persistent storage)
+    # --------------------------------------------------------
+
+    store_original_file(
+
+        document_id=document_id,
+
+        owner_id=user_id,
+
+        filename=original_filename,
+
+        content_type=file_type,
+
+        content=file_content,
+
+    )
+
+    # --------------------------------------------------------
+    # Process in the background
+    # --------------------------------------------------------
+    #
+    # Extraction, OCR and embeddings can take minutes for
+    # large or scanned files, so the response returns now
+    # and the frontend polls the document's status.
+
+    background_tasks.add_task(
+
+        process_document,
+
+        document_id=document_id,
+
+        user_id=user_id,
+
+        storage_path=storage_path,
+
+        storage_filename=storage_filename,
+
+        extension=extension,
+
+        original_filename=original_filename,
+
+    )
+
+    return {
+
+        "id": document_id,
+
+        "filename": original_filename,
+
+        "file_type": file_type,
+
+        "file_size": len(file_content),
+
+        "status": "processing",
+
+        "message": (
+            "Upload received. The document is being "
+            "processed."
+        ),
+
+    }
 
 
 # ============================================================
@@ -844,12 +748,9 @@ def generate_summary(
     # Get user's document
     # --------------------------------------------------------
 
-    document = get_user_document(
-
+    document = get_accessible_document(
         document_id=document_id,
-
         user_id=user_id,
-
     )
 
     if not document:
@@ -859,20 +760,54 @@ def generate_summary(
             detail="Document not found",
         )
 
+    # Owners and editors only.
+    if not role_allows(
+        document["role"],
+        "editor",
+    ):
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner or an editor can generate the summary",
+        )
+
     try:
 
         # ----------------------------------------------------
         # Generate summary using extracted document text
         # ----------------------------------------------------
 
-        result = generate_document_summary(
+        document_text = document.get(
+            "extracted_text",
+            "",
+        )
 
-            document_text=document.get(
-                "extracted_text",
-                "",
+        # ----------------------------------------------------
+        # Long documents: map-reduce over every chunk, so the
+        # summary covers the whole document instead of only
+        # its first 30,000 characters.
+        # ----------------------------------------------------
+
+        chunks = []
+
+        if len(document_text) > DIRECT_SUMMARY_LIMIT:
+
+            chunks = load_document_chunks(
+                user_id=document["owner_id"],
+                document_id=document_id,
             )
 
-        )
+        if chunks:
+
+            result = generate_large_document_summary_result(
+                chunks
+            )
+
+        else:
+
+            result = generate_document_summary(
+                document_text=document_text
+            )
 
         # ----------------------------------------------------
         # Save summary to database
@@ -882,7 +817,7 @@ def generate_summary(
 
             document_id=document_id,
 
-            user_id=user_id,
+            user_id=document["owner_id"],
 
             summary=result["summary"],
 
@@ -959,12 +894,41 @@ def list_documents(
         credentials
     )
 
+    # --------------------------------------------------------
+    # Own documents plus documents shared with the user
+    # --------------------------------------------------------
+
+    shared_ids = shared_document_ids(
+        user_id
+    )
+
+    documents_filter = {
+        "user_id": user_id,
+    }
+
+    if shared_ids:
+
+        documents_filter = {
+            "$or": [
+                {
+                    "user_id": user_id,
+                },
+                {
+                    "_id": {
+                        "$in": [
+                            ObjectId(shared_id)
+                            for shared_id in shared_ids
+                            if ObjectId.is_valid(shared_id)
+                        ],
+                    },
+                },
+            ],
+        }
+
     documents = list(
 
         db.documents.find(
-            {
-                "user_id": user_id,
-            }
+            documents_filter
         ).sort(
             "created_at",
             -1,
@@ -976,9 +940,30 @@ def list_documents(
 
     for document in documents:
 
+        # Role and owner for documents shared with the user.
+        if document.get("user_id") != user_id:
+
+            document = get_accessible_document(
+                document_id=str(document["_id"]),
+                user_id=user_id,
+            )
+
+            if not document:
+                continue
+
+        else:
+
+            document["role"] = "owner"
+            document["owner_id"] = user_id
+
         results.append(
 
             {
+
+                **sharing_fields(
+                    document,
+                    user_id,
+                ),
 
                 "id": str(
                     document["_id"]
@@ -1098,12 +1083,9 @@ def get_document(
     # Get document
     # --------------------------------------------------------
 
-    document = get_user_document(
-
+    document = get_accessible_document(
         document_id=document_id,
-
         user_id=user_id,
-
     )
 
     if not document:
@@ -1114,6 +1096,11 @@ def get_document(
         )
 
     return {
+
+        **sharing_fields(
+            document,
+            user_id,
+        ),
 
         "id": str(
             document["_id"]
@@ -1280,6 +1267,20 @@ def delete_document(
                 print(error)
 
     # --------------------------------------------------------
+    # Delete stored original and shares
+    # --------------------------------------------------------
+
+    delete_original_file(
+        document_id
+    )
+
+    db.document_shares.delete_many(
+        {
+            "document_id": document_id,
+        }
+    )
+
+    # --------------------------------------------------------
     # Delete document chunks
     # --------------------------------------------------------
 
@@ -1354,12 +1355,9 @@ def rename_document(
     # Get document
     # --------------------------------------------------------
 
-    document = get_user_document(
-
+    document = get_accessible_document(
         document_id=document_id,
-
         user_id=user_id,
-
     )
 
     if not document:
@@ -1367,6 +1365,17 @@ def rename_document(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found",
+        )
+
+    # Owners and editors only.
+    if not role_allows(
+        document["role"],
+        "editor",
+    ):
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner or an editor can rename this document",
         )
 
     # --------------------------------------------------------
@@ -1437,8 +1446,11 @@ def rename_document(
     result = db.documents.update_one(
 
         {
+
             "_id": ObjectId(document_id),
-            "user_id": user_id,
+
+            "user_id": document["owner_id"],
+
         },
 
         {

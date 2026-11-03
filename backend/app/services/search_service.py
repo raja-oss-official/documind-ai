@@ -6,6 +6,7 @@ import math
 import re
 
 from app.core.database import db
+from app.services.access_service import chunk_access_filter
 from app.services.embedding_service import create_embedding
 from app.services.vector_search_service import (
     is_vector_search_enabled,
@@ -24,6 +25,8 @@ NEIGHBOR_TRIGGER_SCORE = 0.60
 MIN_NEIGHBOR_SEMANTIC_SCORE = 0.35
 MAX_NEIGHBOR_BOOST = 0.08
 
+
+WORD_PATTERN = r"[0-9a-z\u00c0-\u024f\u0900-\u0dff]+"
 
 STOP_WORDS = {
     "a",
@@ -106,8 +109,11 @@ def tokenize_text(
     if not isinstance(text, str):
         return set()
 
+    # Letters and digits, including accented Latin letters
+    # and the Indic scripts (Devanagari to Sinhala), whose
+    # vowel signs would otherwise split words apart.
     words = re.findall(
-        r"\b[a-zA-Z0-9]+\b",
+        WORD_PATTERN,
         text.lower(),
     )
 
@@ -233,9 +239,17 @@ def find_neighbor_chunks(
     if not neighbor_indexes:
         return []
 
+    # Shared documents store chunks under the owner's user_id.
+    access_filter = chunk_access_filter(
+        user_id=user_id,
+        document_id=document_id,
+    )
+
+    if access_filter is None:
+        return []
+
     search_filter = {
-        "user_id": user_id,
-        "document_id": document_id,
+        **access_filter,
         "chunk_index": {
             "$in": list(neighbor_indexes)
         },
@@ -380,17 +394,22 @@ def search_with_local_similarity(
     limit: int,
     document_id: str | None = None,
 ):
+    # Own documents plus documents shared with the user
+    # (or only the one requested document).
+    access_filter = chunk_access_filter(
+        user_id=user_id,
+        document_id=document_id,
+    )
+
+    if access_filter is None:
+        return []
+
     search_filter = {
-        "user_id": user_id,
+        **access_filter,
         "embedding": {
             "$exists": True
         },
     }
-
-    if document_id:
-        search_filter[
-            "document_id"
-        ] = document_id
 
     chunks = list(
         db.document_chunks.find(

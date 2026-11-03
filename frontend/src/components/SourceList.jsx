@@ -104,6 +104,7 @@ function SourceList({ sources, documents, onOpenDocument, compact = false, highl
                 <SourcePreview
                     source={sources[previewIndex]}
                     documentName={names[sources[previewIndex].document_id]}
+                    document={documents.find((doc) => doc.id === sources[previewIndex].document_id)}
                     highlight={highlight}
                     onClose={() => setPreviewIndex(null)}
                     onOpenDocument={onOpenDocument}

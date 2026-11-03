@@ -21,6 +21,15 @@ class Settings(BaseSettings):
 
     vector_search_enabled: bool = False
 
+    # Keep a copy of every uploaded file in MongoDB (GridFS)
+    # so previews survive restarts of hosts without a
+    # persistent disk (such as Render's free plan).
+    store_original_files: bool = True
+
+    # Tesseract languages tried for OCR, joined with "+".
+    # Languages that are not installed are skipped.
+    ocr_languages: str = "eng+tam+hin"
+
     # Comma-separated browser origins allowed to call the API
     # (e.g. the deployed frontend URL). Defaults to local Vite dev.
     cors_origins: str = (

@@ -9,12 +9,18 @@ import SourceList from "./SourceList.jsx";
 import {
     addChatNote,
     askInChat,
+    askInChatStream,
     createChat,
     deleteChat,
     formatMessageTime,
     getChatMessages,
+    getSharedChatMessages,
+    listChatShares,
+    removeChatShare,
+    shareChat,
     updateChat,
 } from "../api.js";
+import ShareDialog from "./ShareDialog.jsx";
 import { readJSON, userKey, writeJSON } from "../storage.js";
 import { keyPointQuestions, stripMarkdown } from "../text.js";
 import { readAloudSupported, speak, startDictation, stopSpeaking, voiceInputSupported } from "../speech.js";
@@ -116,6 +122,7 @@ function TypedAnswer({ text, onProgress, onDone }) {
 
 function Conversation({
     initialChatId,
+    sharedChat,
     userId,
     pendingPrompt,
     onPromptConsumed,
@@ -149,6 +156,8 @@ function Conversation({
     const [copiedId, setCopiedId] = useState(null);
     const [listening, setListening] = useState(false);
     const [speakingId, setSpeakingId] = useState(null);
+    const [streamText, setStreamText] = useState(null);
+    const [showShare, setShowShare] = useState(false);
 
     // ============================================================
     // REFS AND DERIVED VALUES
@@ -158,7 +167,9 @@ function Conversation({
     const stopDictationRef = useRef(null);
     const handledPromptRef = useRef(false);
 
-    const chat = chats.find((item) => item.id === chatId);
+    // A chat shared by another user opens read-only.
+    const readOnly = Boolean(sharedChat);
+    const chat = sharedChat || chats.find((item) => item.id === chatId);
     const readyDocuments = documents.filter((doc) => doc.status === "completed");
     const hasReadyDocuments = readyDocuments.length > 0;
     const showWelcome = !loading && messages.length === 0 && !pendingQuestion;
@@ -185,19 +196,33 @@ function Conversation({
 
         let cancelled = false;
 
-        getChatMessages(initialChatId)
-            .then((data) => !cancelled && setMessages(Array.isArray(data) ? data : []))
+        const loadMessages = readOnly ? getSharedChatMessages : getChatMessages;
+
+        loadMessages(initialChatId)
+            .then((data) => {
+                if (cancelled) return;
+
+                const list = Array.isArray(data) ? data : [];
+                setMessages(list);
+
+                // Sources saved with messages by the backend; older answers
+                // fall back to the copy kept in this browser.
+                const saved = Object.fromEntries(
+                    list.filter((message) => message.sources?.length).map((message) => [message.id, message.sources])
+                );
+                setSourcesByMessage((current) => ({ ...current, ...saved }));
+            })
             .catch((err) => !cancelled && setError(err.message))
             .finally(() => !cancelled && setLoading(false));
 
         return () => {
             cancelled = true;
         };
-    }, [initialChatId]);
+    }, [initialChatId, readOnly]);
 
     useEffect(() => {
-        scrollToBottom();
-    }, [messages, pendingQuestion]);
+        scrollToBottom(streamText === null);
+    }, [messages, pendingQuestion, streamText]);
 
     useEffect(() => {
         inputRef.current?.focus();
@@ -213,10 +238,10 @@ function Conversation({
     // REMEMBER ANSWER SOURCES IN THIS BROWSER
     // ============================================================
     useEffect(() => {
-        if (chatId && Object.keys(sourcesByMessage).length > 0) {
+        if (chatId && !readOnly && Object.keys(sourcesByMessage).length > 0) {
             writeJSON(sourcesKey(userId, chatId), trimSources(sourcesByMessage));
         }
-    }, [chatId, sourcesByMessage, userId]);
+    }, [chatId, readOnly, sourcesByMessage, userId]);
 
 
     // ============================================================
@@ -264,18 +289,49 @@ function Conversation({
 
         try {
             id = await ensureChat(text);
-            const result = await askInChat(id, text);
+            let started = false;
 
-            setMessages((current) =>
-                [...current, result.user_message, result.assistant_message].filter(Boolean)
-            );
+            try {
+                // The answer streams in as Gemini writes it.
+                await askInChatStream(id, text, (name, data) => {
+                    if (name === "start") {
+                        started = true;
+                        setPendingQuestion("");
+                        setMessages((current) => [...current, data.user_message]);
+                        setStreamText("");
+                    } else if (name === "token") {
+                        setStreamText((current) => (current || "") + data.text);
+                    } else if (name === "done") {
+                        const message = data.assistant_message;
+                        setMessages((current) => [...current, message]);
+                        setSourcesByMessage((current) => ({
+                            ...current,
+                            [message.id]: message.sources?.length ? message.sources : data.sources || [],
+                        }));
+                        setStreamText(null);
+                    } else if (name === "error") {
+                        throw new Error(data.detail);
+                    }
+                });
+            } catch (streamError) {
+                // Older backends have no streaming endpoint: ask the normal way.
+                if (started || ![404, 405].includes(streamError.status)) {
+                    throw streamError;
+                }
 
-            if (result.assistant_message?.id) {
-                setAnimatingId(result.assistant_message.id);
-                setSourcesByMessage((current) => ({
-                    ...current,
-                    [result.assistant_message.id]: result.sources || [],
-                }));
+                const result = await askInChat(id, text);
+
+                setMessages((current) =>
+                    [...current, result.user_message, result.assistant_message].filter(Boolean)
+                );
+
+                if (result.assistant_message?.id) {
+                    setAnimatingId(result.assistant_message.id);
+                    setSourcesByMessage((current) => ({
+                        ...current,
+                        [result.assistant_message.id]: result.sources || [],
+                    }));
+                }
             }
 
             onChatsChanged();
@@ -294,6 +350,7 @@ function Conversation({
             }
         } finally {
             setPendingQuestion("");
+            setStreamText(null);
             setBusy("");
             inputRef.current?.focus();
         }
@@ -514,9 +571,9 @@ function Conversation({
                                 value={currentScope}
                                 onChange={changeScope}
                                 options={scopeOptions}
-                                disabled={!hasReadyDocuments}
+                                disabled={!hasReadyDocuments || readOnly}
                             />
-                            {chat?.document_id && (
+                            {chat?.document_id && documentNames[chat.document_id] && (
                                 <button className="link-button" onClick={() => onOpenDocument(chat.document_id)}>
                                     Open
                                 </button>
@@ -527,6 +584,7 @@ function Conversation({
 
                 {chatId && !renaming && (
                     <div className="cb-header-actions">
+                        {readOnly && <span className="shared-tag">Shared by {chat?.owner_name || "another user"}</span>}
                         {confirmDelete ? (
                             <>
                                 <span className="muted">Delete this chat?</span>
@@ -557,23 +615,34 @@ function Conversation({
                                         </button>
                                     </>
                                 )}
-                                <button
-                                    className="cb-icon-button"
-                                    title="Rename chat"
-                                    onClick={() => {
-                                        setRenameTitle(chat?.title || "");
-                                        setRenaming(true);
-                                    }}
-                                >
-                                    <Icon name="pencil" size={15} />
-                                </button>
-                                <button
-                                    className="cb-icon-button cb-icon-danger"
-                                    title="Delete chat"
-                                    onClick={() => setConfirmDelete(true)}
-                                >
-                                    <Icon name="trash" size={15} />
-                                </button>
+                                {!readOnly && (
+                                    <>
+                                        <button
+                                            className="cb-icon-button"
+                                            title="Share chat (read-only)"
+                                            onClick={() => setShowShare(true)}
+                                        >
+                                            <Icon name="share" size={15} />
+                                        </button>
+                                        <button
+                                            className="cb-icon-button"
+                                            title="Rename chat"
+                                            onClick={() => {
+                                                setRenameTitle(chat?.title || "");
+                                                setRenaming(true);
+                                            }}
+                                        >
+                                            <Icon name="pencil" size={15} />
+                                        </button>
+                                        <button
+                                            className="cb-icon-button cb-icon-danger"
+                                            title="Delete chat"
+                                            onClick={() => setConfirmDelete(true)}
+                                        >
+                                            <Icon name="trash" size={15} />
+                                        </button>
+                                    </>
+                                )}
                             </>
                         )}
                     </div>
@@ -709,6 +778,26 @@ function Conversation({
                             )
                         )}
 
+                        {streamText !== null && (
+                            <div className="cb-row cb-row-assistant">
+                                <span className="cb-avatar">
+                                    <Icon name="sparkles" size={24} gradient strokeWidth={1.7} />
+                                </span>
+                                <div className="cb-answer">
+                                    <div className="cb-answer-name">DocuMind AI</div>
+                                    {streamText ? (
+                                        <Markdown text={streamText} />
+                                    ) : (
+                                        <div className="cb-typing" aria-label="DocuMind AI is thinking">
+                                            <span />
+                                            <span />
+                                            <span />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {pendingQuestion && (
                             <>
                                 <div className="cb-row cb-row-user">
@@ -746,6 +835,12 @@ function Conversation({
                     </div>
                 )}
 
+                {readOnly ? (
+                    <div className="cb-readonly">
+                        <Icon name="lock" size={14} /> This chat was shared with you to read. Start your own chat to ask
+                        questions.
+                    </div>
+                ) : (
                 <form
                     className="cb-composer"
                     onSubmit={(event) => {
@@ -816,11 +911,24 @@ function Conversation({
                         {busy === "ask" ? <span className="spinner spinner-light" /> : <Icon name="arrowUp" size={18} />}
                     </button>
                 </form>
+                )}
                 <div className="cb-hint">
                     Answers come from your documents. <kbd>Enter</kbd> to send · <kbd>Shift</kbd> +{" "}
                     <kbd>Enter</kbd> for a new line
                 </div>
             </div>
+
+            {showShare && (
+                <ShareDialog
+                    title={`Share "${chat?.title || "chat"}"`}
+                    subtitle="People you share with can read this conversation. They cannot add to it."
+                    roles={["viewer"]}
+                    loadShares={() => listChatShares(chatId)}
+                    addShare={(share) => shareChat(chatId, share)}
+                    removeShare={(shareUserId) => removeChatShare(chatId, shareUserId)}
+                    onClose={() => setShowShare(false)}
+                />
+            )}
         </section>
     );
 }
@@ -834,6 +942,7 @@ function ChatView({
     pendingPrompt,
     onPromptConsumed,
     chats,
+    sharedChats = [],
     documents,
     activeChatId,
     onSelectChat,
@@ -863,6 +972,17 @@ function ChatView({
         setConversationKey(chatId || `new-${Date.now()}`);
         setHistoryOpen(false);
     };
+
+    // Shared chats open read-only under a "shared-" key.
+    const openSharedChat = (chatId) => {
+        setConversationKey(`shared-${chatId}`);
+        setHistoryOpen(false);
+    };
+
+    const visibleShared = sharedChats.filter((chat) =>
+        (chat.title || "").toLowerCase().includes(filter.trim().toLowerCase())
+    );
+    const sharedId = conversationKey.startsWith("shared-") ? conversationKey.slice(7) : null;
 
     return (
         <div className={`cb-layout ${historyOpen ? "history-open" : ""}`}>
@@ -907,7 +1027,26 @@ function ChatView({
                         </div>
                     ))}
 
-                    {visibleChats.length === 0 && (
+                    {visibleShared.length > 0 && (
+                        <div className="cb-history-group">
+                            <div className="cb-history-label">Shared with you</div>
+                            {visibleShared.map((chat) => (
+                                <button
+                                    key={chat.id}
+                                    className={`cb-history-item ${chat.id === sharedId ? "active" : ""}`}
+                                    onClick={() => openSharedChat(chat.id)}
+                                >
+                                    <Icon name="share" size={14} />
+                                    <span>
+                                        <strong>{chat.title}</strong>
+                                        <small>From {chat.owner_name || "another user"} · read-only</small>
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {visibleChats.length === 0 && visibleShared.length === 0 && (
                         <p className="cb-history-empty">
                             {chats.length === 0 ? "Your conversations will appear here." : "No chats match your search."}
                         </p>
@@ -925,7 +1064,10 @@ function ChatView({
                 ============================================================ */}
             <Conversation
                 key={conversationKey}
-                initialChatId={conversationKey.startsWith("new-") ? null : conversationKey}
+                initialChatId={
+                    conversationKey.startsWith("new-") ? null : sharedId || conversationKey
+                }
+                sharedChat={sharedId ? sharedChats.find((chat) => chat.id === sharedId) || { id: sharedId } : null}
                 userId={userId}
                 pendingPrompt={pendingPrompt?.chatId === conversationKey ? pendingPrompt : null}
                 onPromptConsumed={onPromptConsumed}

@@ -147,19 +147,13 @@ class ChatMessageCreate(ChatBase):
 # -------------------------------------------------
 
 class ChatMessageResponse(ChatBase):
-
     id: str
-
     session_id: str
-
     user_id: str
-
     role: str
-
     content: str
-
     document_id: str | None
-
+    sources: list[dict] = []
     created_at: datetime
 
 

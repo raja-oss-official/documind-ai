@@ -307,6 +307,91 @@ export const searchDocuments = ({ query, documentId, limit = 5 }) =>
 export const askDocuments = (question) =>
   request("/documents/ask", { method: "POST", body: { question } });
 
+// Polls a document until background processing finishes.
+export async function waitForDocument(documentId, { interval = 2000, timeout = 15 * 60 * 1000 } = {}) {
+  const started = Date.now();
+
+  for (;;) {
+    const document = await getDocument(documentId);
+
+    if (document.status !== "processing" || Date.now() - started > timeout) {
+      return document;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+}
+
+// ============================================================
+// DOCUMENT TOOLS
+// ============================================================
+
+export const compareDocuments = (documentIds, focus) =>
+  request("/documents/compare", {
+    method: "POST",
+    body: { document_ids: documentIds, focus: focus || null },
+  });
+
+export const generateStudySet = (documentId, type, count = 8) =>
+  request(`/documents/${documentId}/study`, {
+    method: "POST",
+    body: { type, count },
+  });
+
+export const extractFacts = (documentId) =>
+  request(`/documents/${documentId}/facts`, { method: "POST" });
+
+// The original file as a Blob (fetched with the access token).
+export async function getDocumentFile(documentId) {
+  const fetchFile = () =>
+    fetch(`${API_BASE_URL}/documents/${documentId}/file`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    });
+
+  let response = await fetchFile();
+
+  if (response.status === 401 && (await refreshAccessToken())) {
+    response = await fetchFile();
+  }
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new ApiError(extractErrorMessage(data, response.status), response.status);
+  }
+
+  return response.blob();
+}
+
+// ============================================================
+// SHARING
+// ============================================================
+
+export const listDocumentShares = (documentId) => request(`/documents/${documentId}/shares`);
+
+export const shareDocument = (documentId, { email, role }) =>
+  request(`/documents/${documentId}/shares`, {
+    method: "POST",
+    body: { email, role },
+  });
+
+export const removeDocumentShare = (documentId, userId) =>
+  request(`/documents/${documentId}/shares/${userId}`, { method: "DELETE" });
+
+export const listChatShares = (sessionId) => request(`/chats/${sessionId}/shares`);
+
+export const shareChat = (sessionId, { email }) =>
+  request(`/chats/${sessionId}/shares`, {
+    method: "POST",
+    body: { email },
+  });
+
+export const removeChatShare = (sessionId, userId) =>
+  request(`/chats/${sessionId}/shares/${userId}`, { method: "DELETE" });
+
+export const listSharedChats = () => request("/chats/shared");
+
+export const getSharedChatMessages = (sessionId) => request(`/chats/shared/${sessionId}/messages`);
+
 // ============================================================
 // CHATS
 // ============================================================
@@ -349,6 +434,79 @@ export const askInChat = (sessionId, question) =>
     method: "POST",
     body: { question },
   });
+
+// ============================================================
+// STREAMING CHAT ANSWERS (SERVER-SENT EVENTS)
+// ============================================================
+// Calls onEvent(name, data) for "start", "token" (many), "done"
+// and "error". Retries once after refreshing an expired token.
+export async function askInChatStream(sessionId, question, onEvent) {
+  const send = () =>
+    fetch(`${API_BASE_URL}/chats/${sessionId}/ask/stream`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
+      },
+      body: JSON.stringify({ question }),
+    });
+
+  let response;
+
+  try {
+    response = await send();
+
+    if (response.status === 401 && (await refreshAccessToken())) {
+      response = await send();
+    }
+  } catch {
+    throw new ApiError(
+      `Cannot reach the backend. Make sure FastAPI is running at ${new URL(API_BASE_URL).origin}.`,
+      0
+    );
+  }
+
+  if (response.status === 401) {
+    clearTokens();
+    sessionExpiredHandler?.();
+    throw new ApiError("Your session has expired. Please sign in again.", 401);
+  }
+
+  if (!response.ok || !response.body) {
+    const data = await response.json().catch(() => ({}));
+    throw new ApiError(extractErrorMessage(data, response.status), response.status);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  for (;;) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+
+    // Events are separated by a blank line: "event: x\ndata: {...}\n\n".
+    let end = buffer.indexOf("\n\n");
+
+    while (end >= 0) {
+      const block = buffer.slice(0, end);
+      buffer = buffer.slice(end + 2);
+      end = buffer.indexOf("\n\n");
+
+      const name = block.match(/^event: (.*)$/m)?.[1];
+      const data = block.match(/^data: (.*)$/m)?.[1];
+
+      if (name && data) {
+        onEvent(name, JSON.parse(data));
+      }
+    }
+  }
+}
 
 // ============================================================
 // FORMATTING HELPERS

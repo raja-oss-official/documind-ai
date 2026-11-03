@@ -64,7 +64,12 @@ Every document, chunk, chat and search is scoped to the signed-in user.
 - File-signature validation, safe filenames and per-user storage.
 - Automatic **OCR** for scanned PDFs and images (Tesseract).
 - Per-document statistics: pages, words, characters, chunks, processing type.
-- **AI summary with key points**, using a multi-stage map-reduce summary for large documents.
+- **Background processing**: the upload returns immediately and the file is extracted, chunked and embedded on the server; the app shows progress until it is ready.
+- **AI summary with key points**; documents over 30,000 characters use a parallel **map-reduce** summary over every chunk, so the whole document is covered.
+- **Preview the original file** (PDFs open at the cited page, images and text inline). Originals are kept in MongoDB GridFS, so previews survive server restarts.
+- **AI tools** on every document: **quiz** (multiple choice with explanations), **flashcards**, **key facts** (dates, deadlines, amounts, people, organizations, places) with **CSV download**, and **compare two documents** (similarities, a differences table, and what is only in one).
+- **Multilingual**: OCR in English, Tamil and Hindi; answers come back in the language of the question.
+- **Sharing**: share a document as **viewer** (read, search, chat, tools) or **editor** (also rename and update the summary); share a chat **read-only**.
 - Rename (file type is preserved) and delete (file, chunks and record).
 
 ### AI search
@@ -113,7 +118,7 @@ Every document, chunk, chat and search is scoped to the signed-in user.
 | OCR | Tesseract (`pytesseract`), Poppler (`pdf2image`), Pillow |
 | Auth | PyJWT (HS256), pwdlib with Argon2 password hashing |
 | Protection | slowapi rate limiting, custom security-headers middleware, CORS |
-| Testing | pytest (63 tests) |
+| Testing | pytest (79 tests) |
 
 ---
 
@@ -148,11 +153,11 @@ flowchart LR
 ### 1. Upload pipeline
 
 1. **Validate**: the extension must be supported, the size at most 10 MB, and the file signature must match the type (`%PDF-`, `PK` zip for Office files, PNG/JPEG magic bytes).
-2. **Store**: the file is saved as `uploads/<document_id>.<ext>` and a `documents` record is created with status `processing`.
-3. **Extract text** per page or sheet or slide. Scanned PDFs and images go through OCR.
+2. **Store**: the file is saved as `uploads/<document_id>.<ext>` (and a copy in GridFS for previews), a `documents` record is created with status `processing`, and **the request returns**.
+3. **Background task — extract text** per page or sheet or slide. Scanned PDFs and images go through OCR (English, Tamil, Hindi).
 4. **Chunk** the text into 500-character chunks with 50-character overlap, keeping page numbers.
 5. **Embed** each chunk with `gemini-embedding-2` and save it to `document_chunks`.
-6. **Finish**: statistics are saved and the status becomes `completed` (or `failed` with a reason).
+6. **Finish**: statistics are saved and the status becomes `completed` (or `failed` with a reason). The frontend polls until then. Uploads interrupted by a server restart are marked `failed` at start-up.
 
 ### 2. Hybrid search
 
@@ -171,11 +176,16 @@ Results below a minimum semantic score are dropped. Search uses MongoDB Atlas ve
 3. Otherwise build context from up to 4 anchor chunks plus intelligent neighbours (max 12 chunks).
 4. Add recent conversation history (last 10 messages) for follow-up questions.
 5. Gemini answers with strict grounding rules: only the document context, no outside knowledge, and a clear "I couldn't find that information in your documents." when needed. It is formatted in Markdown.
-6. The question, the answer and the sources are returned. Chat messages are saved to `chat_messages`.
+6. In chat, the answer **streams** to the browser as Server-Sent Events while Gemini writes it. The question, the answer and its **sources** are saved to `chat_messages`, so citations show on every older message too.
+7. Answers are written in the language of the question, even when the documents are in another language.
 
 ### 4. Summaries
 
-Small documents are summarised directly. Large documents use **map-reduce**: chunks are summarised in batches of 5, then combined into a final summary with key points.
+Documents up to 30,000 characters are summarised directly. Longer documents use **map-reduce**: chunks are grouped into at most 16 batches (about 12,000 characters each), summarised four at a time in parallel, then combined into a final summary with key points.
+
+### 5. Sharing
+
+Documents and chunks stay stored under the owner. A `document_shares` record grants a viewer or editor access, and one access helper (`services/access_service.py`) builds every chunk query, so search, Ask AI, chat and the tools all include shared documents. Chats are shared read-only through `chat_shares`.
 
 ---
 
@@ -202,7 +212,9 @@ documind-ai/
 │   │   │   ├── auth.py           Register, login, refresh, logout, me, change password
 │   │   │   ├── documents.py      Upload, list, get, rename, delete, summary, ask
 │   │   │   ├── search.py         Hybrid semantic search
-│   │   │   └── chats.py          Chat sessions, messages, ask in chat
+│   │   │   ├── chats.py          Chat sessions, messages, ask (and streaming ask)
+│   │   │   ├── document_tools.py Compare, quiz/flashcards, key facts, original file
+│   │   │   └── sharing.py        Document and chat sharing
 │   │   ├── schemas/              Pydantic request/response models
 │   │   │   ├── user.py · document.py · chat.py · health.py
 │   │   └── services/
@@ -218,8 +230,13 @@ documind-ai/
 │   │       ├── document_service.py           Document records (CRUD)
 │   │       ├── document_intelligence_service.py  Summaries
 │   │       ├── large_document_summary_service.py Map-reduce summaries
-│   │       ├── gemini_service.py             Gemini client + model fallback
-│   │       └── refresh_token_service.py      Hashed refresh-token store
+│   │       ├── gemini_service.py             Gemini client, model fallback, streaming, JSON
+│   │       ├── refresh_token_service.py      Hashed refresh-token store
+│   │       ├── access_service.py             Owner / editor / viewer access for every query
+│   │       ├── sharing_service.py            Document and chat shares
+│   │       ├── document_processing_service.py Background extraction, chunking, embeddings
+│   │       ├── file_storage_service.py       Original files in MongoDB GridFS
+│   │       └── document_tools_service.py     Compare, quiz, flashcards, key facts
 │   ├── tests/                    pytest suite (auth, security, indexes, search, RAG…)
 │   ├── uploads/                  Uploaded files (git-ignored)
 │   ├── requirements.txt
@@ -367,6 +384,8 @@ docker run -p 8000:8000 --env-file .env documind-ai-api
 | `VECTOR_SEARCH_ENABLED` | no | `false` | Use MongoDB Atlas vector search instead of the local fallback |
 | `CORS_ORIGINS` | no | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated frontend origins allowed to call the API |
 | `CORS_ORIGIN_REGEX` | no | | Optional regex of extra allowed origins (e.g. Vercel previews) |
+| `STORE_ORIGINAL_FILES` | no | `true` | Keep a copy of each upload in MongoDB GridFS for previews |
+| `OCR_LANGUAGES` | no | `eng+tam+hin` | Tesseract languages for OCR; languages that are not installed are skipped |
 
 ### Frontend (`frontend/.env`, optional)
 
@@ -418,6 +437,20 @@ Passwords need at least 8 characters with an uppercase letter, a lowercase lette
 | POST | `/documents/{id}/summary` 🔒 | Generate and save a summary + key points |
 | POST | `/documents/ask` 🔒 | `{ "question": "…" }`: answer from all documents, with sources |
 | GET | `/documents/search?q=…&document_id=…&limit=5` 🔒 | Hybrid semantic search (limit 1–20) |
+| GET | `/documents/{id}/file` 🔒 | The original uploaded file (for previews) |
+| POST | `/documents/{id}/study` 🔒 | `{ "type": "quiz" \| "flashcards", "count": 3–15 }` |
+| POST | `/documents/{id}/facts` 🔒 | Key facts: category, value, context, page |
+| POST | `/documents/compare` 🔒 | `{ "document_ids": [a, b], "focus": "…" }`: Markdown comparison |
+
+### Sharing
+| Method | Endpoint | Description |
+|---|---|---|
+| GET / POST | `/documents/{id}/shares` 🔒 | List shares, or share `{ "email", "role": "viewer" \| "editor" }` (owner only, 10/min) |
+| DELETE | `/documents/{id}/shares/{user_id}` 🔒 | Stop sharing (owner), or remove a shared document from your own list |
+| GET / POST | `/chats/{id}/shares` 🔒 | List shares, or share a chat read-only `{ "email" }` |
+| DELETE | `/chats/{id}/shares/{user_id}` 🔒 | Stop sharing a chat |
+| GET | `/chats/shared` 🔒 | Chats shared with you |
+| GET | `/chats/shared/{id}/messages` 🔒 | Messages of a chat shared with you |
 
 ### Chats
 | Method | Endpoint | Description |
@@ -430,6 +463,7 @@ Passwords need at least 8 characters with an uppercase letter, a lowercase lette
 | GET | `/chats/{id}/messages` 🔒 | Message history |
 | POST | `/chats/{id}/messages` 🔒 | Save a user message/note without an AI answer |
 | POST | `/chats/{id}/ask` 🔒 | `{ "question": "…" }`: saves the question, answers with RAG and returns the answer, both messages and sources |
+| POST | `/chats/{id}/ask/stream` 🔒 | Same, as Server-Sent Events: `start` (sources), `token` (many), `done` (saved message) |
 
 Interactive documentation for every endpoint is available at `/docs` while the backend is running.
 
@@ -478,7 +512,7 @@ source .venv/bin/activate
 pytest -q
 ```
 
-The suite (63 tests) covers authentication, password security, refresh-token rotation, error handling, database indexes and query plans, chunking and search performance, large documents and backend integration.
+The suite (79 tests) covers authentication, password security, refresh-token rotation, error handling, database indexes and query plans, chunking and search performance, large documents and backend integration, plus `test_enhancements.py`: map-reduce summaries, saved sources, streaming, background processing and GridFS storage, compare / quiz / flashcards / facts, sharing roles, and multilingual search and OCR. The new tests replace Gemini with fakes, so they run offline.
 
 Frontend checks:
 
@@ -492,11 +526,13 @@ npm run build
 
 ## Limitations and future work
 
-- Answers are generated in one request, so the word-by-word reveal in chat is visual, not true streaming.
-- Answer sources are returned with each answer but not stored with chat messages by the backend. The frontend keeps them in the browser, so they are shown again on the same browser, but not on another device or after signing out.
 - Text extraction normalises whitespace, so code indentation inside uploaded documents is flattened.
 - A chat can be moved to another document but not unlinked back to "All documents".
-- Possible next steps: streaming responses, saved sources, background processing for very large uploads, sharing and team workspaces.
+- Background processing runs inside the API process: on a free host that sleeps, an interrupted upload is marked failed and must be uploaded again.
+- Original files are stored in MongoDB (GridFS); the free Atlas M0 tier has 512 MB in total.
+- Previews open PDFs at the cited page; highlighting the exact passage inside the PDF would need a PDF renderer such as pdf.js.
+- Shared chats are read-only; documents can be shared, but there are no team workspaces yet.
+- Possible next steps: a job queue for processing, pdf.js passage highlighting, team workspaces, more OCR languages.
 
 ---
 

@@ -10,11 +10,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # ============================================================
 # SYSTEM PACKAGES (OCR: TESSERACT + POPPLER)
+# English, Tamil and Hindi OCR language packs
 # ============================================================
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tesseract-ocr \
         tesseract-ocr-eng \
+        tesseract-ocr-tam \
+        tesseract-ocr-hin \
         poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 

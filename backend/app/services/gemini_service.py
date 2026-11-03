@@ -2,6 +2,8 @@
 # IMPORTS
 # ============================================================
 
+import json
+
 from google import genai
 
 from app.core.config import settings
@@ -54,3 +56,74 @@ def generate_answer(prompt: str) -> str:
     raise RuntimeError(
         f"All Gemini models failed. Last error: {last_error}"
     )
+
+
+# ============================================================
+# STREAM ANSWER
+# ============================================================
+
+def stream_answer(prompt: str):
+    """
+    Yield the answer text piece by piece as Gemini writes it.
+
+    Models are tried in the same order as generate_answer().
+    A model that fails before sending any text is skipped;
+    once text has been sent, a failure is raised so the
+    caller can keep what it already has.
+    """
+
+    last_error = None
+
+    for model in MODELS:
+        sent_text = False
+
+        try:
+            for chunk in client.models.generate_content_stream(
+                model=model,
+                contents=prompt
+            ):
+                if chunk.text:
+                    sent_text = True
+                    yield chunk.text
+
+            if sent_text:
+                return
+
+        except Exception as error:
+            if sent_text:
+                raise
+
+            last_error = error
+            print(f"Gemini model failed: {model}")
+            print(error)
+
+    raise RuntimeError(
+        f"All Gemini models failed. Last error: {last_error}"
+    )
+
+
+# ============================================================
+# GENERATE JSON
+# ============================================================
+
+def generate_json(prompt: str):
+    """
+    Ask Gemini for a JSON answer and parse it.
+
+    Code fences around the JSON are removed. Raises
+    ValueError when the response is not valid JSON.
+    """
+
+    text = generate_answer(prompt).strip()
+
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1]
+        text = text.rsplit("```", 1)[0]
+
+    try:
+        return json.loads(text)
+
+    except json.JSONDecodeError as error:
+        raise ValueError(
+            "Gemini did not return valid JSON"
+        ) from error

@@ -12,11 +12,19 @@ from app.routes.auth import router as auth_router
 from app.routes.search import router as search_router
 from app.routes.documents import router as documents_router
 from app.routes.chats import router as chats_router
+from app.routes.document_tools import router as document_tools_router
+from app.routes.sharing import (
+    chat_router as chat_sharing_router,
+    document_router as document_sharing_router,
+)
 
 from app.core.config import settings
 from app.core.rate_limiter import limiter
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.error_handlers import unhandled_exception_handler
+from app.services.document_processing_service import (
+    recover_interrupted_documents,
+)
 
 
 # ============================================================
@@ -47,6 +55,20 @@ openapi_tags = [
         "description": (
             "Search document content using semantic similarity. "
             "Results are restricted to the authenticated user."
+        ),
+    },
+    {
+        "name": "Document Tools",
+        "description": (
+            "Compare documents, create quizzes and flashcards, "
+            "extract key facts, and preview original files."
+        ),
+    },
+    {
+        "name": "Sharing",
+        "description": (
+            "Share documents (viewer or editor) and chats "
+            "(read-only) with other users."
         ),
     },
     {
@@ -97,6 +119,15 @@ Version: 1.0.0
     redoc_url="/redoc",
     openapi_url="/openapi.json",
 )
+
+
+# ============================================================
+# START-UP: RECOVER INTERRUPTED UPLOADS
+# ============================================================
+
+# Background processing stops when the server restarts;
+# documents it left in "processing" are marked as failed.
+recover_interrupted_documents()
 
 
 # ============================================================
@@ -176,9 +207,29 @@ app.include_router(
 )
 
 app.include_router(
+    document_tools_router,
+    prefix="/api/v1/documents",
+    tags=["Document Tools"],
+)
+
+app.include_router(
+    document_sharing_router,
+    prefix="/api/v1/documents",
+    tags=["Sharing"],
+)
+
+app.include_router(
     documents_router,
     prefix="/api/v1/documents",
     tags=["Documents"],
+)
+
+# Before the chats router so /chats/shared is not read
+# as a chat ID.
+app.include_router(
+    chat_sharing_router,
+    prefix="/api/v1/chats",
+    tags=["Sharing"],
 )
 
 app.include_router(

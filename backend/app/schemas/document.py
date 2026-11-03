@@ -3,9 +3,11 @@
 # ============================================================
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import (
     BaseModel,
+    EmailStr,
     ConfigDict,
     Field,
     field_validator,
@@ -108,3 +110,65 @@ class DocumentRenameRequest(DocumentBase):
             )
 
         return value
+
+# -------------------------------------------------
+# Compare Two Documents
+# -------------------------------------------------
+
+class CompareRequest(DocumentBase):
+
+    document_ids: list[str] = Field(
+        ...,
+        min_length=2,
+        max_length=2,
+    )
+
+    focus: str | None = Field(
+        default=None,
+        max_length=500,
+    )
+
+    @field_validator("document_ids")
+    @classmethod
+    def validate_document_ids(
+        cls,
+        value: list[str],
+    ) -> list[str]:
+
+        value = [
+            document_id.strip()
+            for document_id in value
+        ]
+
+        if len(set(value)) != 2:
+            raise ValueError(
+                "Choose two different documents"
+            )
+
+        return value
+
+
+# -------------------------------------------------
+# Quiz / Flashcards
+# -------------------------------------------------
+
+class StudyRequest(DocumentBase):
+
+    type: Literal["quiz", "flashcards"] = "quiz"
+
+    count: int = Field(
+        default=8,
+        ge=3,
+        le=15,
+    )
+
+
+# -------------------------------------------------
+# Share a Document or Chat
+# -------------------------------------------------
+
+class ShareRequest(DocumentBase):
+
+    email: EmailStr
+
+    role: Literal["viewer", "editor"] = "viewer"

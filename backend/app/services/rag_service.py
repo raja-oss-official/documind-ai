@@ -15,6 +15,11 @@ from app.services.gemini_service import (
 
 from app.core.database import db
 
+from app.services.access_service import (
+    chunk_access_filter,
+    document_owner_id
+)
+
 
 # ============================================================
 # CONFIGURATION
@@ -306,13 +311,26 @@ def fetch_intelligent_neighbors(
         return neighbors
 
     # --------------------------------------------------------
+    # Shared documents store chunks under the owner's ID
+    # --------------------------------------------------------
+
+    owner_id = document_owner_id(
+        document_id=document_id,
+        user_id=user_id
+    )
+
+    if not owner_id:
+
+        return neighbors
+
+    # --------------------------------------------------------
     # Previous chunk
     # --------------------------------------------------------
 
     previous_chunk = db.document_chunks.find_one({
 
         "user_id":
-            user_id,
+            owner_id,
 
         "document_id":
             document_id,
@@ -328,7 +346,7 @@ def fetch_intelligent_neighbors(
     next_chunk = db.document_chunks.find_one({
 
         "user_id":
-            user_id,
+            owner_id,
 
         "document_id":
             document_id,
@@ -1108,19 +1126,23 @@ def load_document_chunks(
     document_id: str
 ):
     """
-    Load every chunk of one user-owned document in
-    document order (embeddings excluded).
+    Load every chunk of one document the user can read
+    (owned or shared) in document order (embeddings
+    excluded).
     """
+
+    access_filter = chunk_access_filter(
+        user_id=user_id,
+        document_id=document_id
+    )
+
+    if access_filter is None:
+        return []
 
     return list(
 
         db.document_chunks.find(
-            {
-                "user_id":
-                    user_id,
-                "document_id":
-                    document_id
-            },
+            access_filter,
             {
                 "embedding":
                     0

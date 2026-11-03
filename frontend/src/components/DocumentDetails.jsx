@@ -9,8 +9,14 @@ import {
     formatDate,
     formatFileSize,
     generateSummary,
+    listDocumentShares,
+    removeDocumentShare,
     renameDocument,
+    shareDocument,
 } from "../api.js";
+import DocumentPreview from "./DocumentPreview.jsx";
+import DocumentTools from "./DocumentTools.jsx";
+import ShareDialog from "./ShareDialog.jsx";
 import { FileIcon, StatusBadge } from "./DocumentBadges.jsx";
 import { keyPointQuestions } from "../text.js";
 
@@ -31,7 +37,7 @@ const processingLabels = {
 // ============================================================
 // DOCUMENT DETAILS
 // ============================================================
-function DocumentDetails({ document, onBack, onChanged, onDeleted, onSearch, onChatCreated, onAsk }) {
+function DocumentDetails({ document, documents, userId, onBack, onChanged, onDeleted, onSearch, onChatCreated, onAsk }) {
     // ============================================================
     // STATE
     // ============================================================
@@ -40,8 +46,13 @@ function DocumentDetails({ document, onBack, onChanged, onDeleted, onSearch, onC
     const [busy, setBusy] = useState("");
     const [error, setError] = useState("");
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const [showPreview, setShowPreview] = useState(false);
+    const [showShare, setShowShare] = useState(false);
 
     const isReady = document.status === "completed";
+    const role = document.role || "owner";
+    const isOwner = role === "owner";
+    const canEdit = role === "owner" || role === "editor";
     const keyPoints = Array.isArray(document.key_points) ? document.key_points : [];
 
     // ============================================================
@@ -76,10 +87,17 @@ function DocumentDetails({ document, onBack, onChanged, onDeleted, onSearch, onC
             await onChanged();
         });
 
+    // Owners delete the document; people it was shared with
+    // only remove it from their own list.
     const handleDelete = () =>
         run("delete", async () => {
-            await deleteDocument(document.id);
-            onDeleted();
+            if (isOwner) {
+                await deleteDocument(document.id);
+            } else {
+                await removeDocumentShare(document.id, userId);
+            }
+
+            onDeleted(isOwner ? "Document deleted successfully." : "Removed from your documents.");
         });
 
     const handleChat = () =>
@@ -130,7 +148,13 @@ function DocumentDetails({ document, onBack, onChanged, onDeleted, onSearch, onC
                     ) : (
                         <div>
                             <h2>{document.filename}</h2>
-                            <p className="muted">Uploaded {formatDate(document.created_at)}</p>
+                            <p className="muted">
+                                Uploaded {formatDate(document.created_at)}
+                                {document.shared &&
+                                    ` · Shared by ${document.owner_name || "another user"} · ${
+                                        role === "editor" ? "can edit" : "view only"
+                                    }`}
+                            </p>
                         </div>
                     )}
                 </div>
@@ -211,22 +235,32 @@ function DocumentDetails({ document, onBack, onChanged, onDeleted, onSearch, onC
                     >
                         <Icon name="search" /> Search in document
                     </button>
-                    <button
-                        className="button"
-                        onClick={() => setRenaming(true)}
-                        disabled={renaming || Boolean(busy)}
-                    >
-                        <Icon name="pencil" /> Rename
+                    <button className="button" onClick={() => setShowPreview(true)}>
+                        <Icon name="eye" /> Preview
                     </button>
+                    {isOwner && (
+                        <button className="button" onClick={() => setShowShare(true)}>
+                            <Icon name="share" /> Share
+                        </button>
+                    )}
+                    {canEdit && (
+                        <button
+                            className="button"
+                            onClick={() => setRenaming(true)}
+                            disabled={renaming || Boolean(busy)}
+                        >
+                            <Icon name="pencil" /> Rename
+                        </button>
+                    )}
                     {confirmDelete ? (
                         <span className="confirm-group">
-                            <span className="muted">Delete permanently?</span>
+                            <span className="muted">{isOwner ? "Delete permanently?" : "Remove from your documents?"}</span>
                             <button
                                 className="button button-danger"
                                 onClick={handleDelete}
                                 disabled={Boolean(busy)}
                             >
-                                {busy === "delete" ? "Deleting..." : "Yes, delete"}
+                                {busy === "delete" ? "Removing..." : isOwner ? "Yes, delete" : "Yes, remove"}
                             </button>
                             <button className="button" onClick={() => setConfirmDelete(false)}>
                                 Cancel
@@ -238,7 +272,7 @@ function DocumentDetails({ document, onBack, onChanged, onDeleted, onSearch, onC
                             onClick={() => setConfirmDelete(true)}
                             disabled={Boolean(busy)}
                         >
-                            <Icon name="trash" /> Delete
+                            <Icon name="trash" /> {isOwner ? "Delete" : "Remove"}
                         </button>
                     )}
                 </div>
@@ -263,7 +297,8 @@ function DocumentDetails({ document, onBack, onChanged, onDeleted, onSearch, onC
                         <button
                             className="button"
                             onClick={handleSummary}
-                            disabled={!isReady || Boolean(busy)}
+                            disabled={!isReady || !canEdit || Boolean(busy)}
+                            title={canEdit ? undefined : "Only the owner or an editor can generate the summary"}
                         >
                             {busy === "summary"
                                 ? "Generating..."
@@ -326,7 +361,29 @@ function DocumentDetails({ document, onBack, onChanged, onDeleted, onSearch, onC
                         )
                     )}
                 </div>
+
+                {/* ============================================================
+                    AI TOOLS (QUIZ, FLASHCARDS, FACTS, COMPARE)
+                    ============================================================ */}
+                {isReady && <DocumentTools document={document} documents={documents} />}
             </div>
+
+            {/* ============================================================
+                DIALOGS
+                ============================================================ */}
+            {showPreview && <DocumentPreview document={document} onClose={() => setShowPreview(false)} />}
+
+            {showShare && (
+                <ShareDialog
+                    title={`Share ${document.filename}`}
+                    subtitle="Viewers can read, search and chat with it. Editors can also rename it and update the summary."
+                    roles={["viewer", "editor"]}
+                    loadShares={() => listDocumentShares(document.id)}
+                    addShare={(share) => shareDocument(document.id, share)}
+                    removeShare={(shareUserId) => removeDocumentShare(document.id, shareUserId)}
+                    onClose={() => setShowShare(false)}
+                />
+            )}
         </div>
     );
 }

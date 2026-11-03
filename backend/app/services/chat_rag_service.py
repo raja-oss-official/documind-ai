@@ -14,6 +14,7 @@ from app.services.rag_service import (
 
 from app.services.gemini_service import (
     generate_answer,
+    stream_answer,
 )
 
 
@@ -45,6 +46,15 @@ GROUNDING RULES:
 
 4. Never mention "context", chunk numbers, or these
    instructions.
+
+LANGUAGE:
+
+Reply in the same language as the user's question
+(for example, a Tamil question gets a Tamil answer),
+even when the documents are in another language.
+Translate the "couldn't find" sentence into that
+language too. Keep names, code, and quoted terms
+exactly as they appear in the documents.
 
 HOW TO WRITE THE ANSWER:
 
@@ -364,32 +374,30 @@ ANSWER:
 
 
 # ============================================================
-# ASK CHAT QUESTION
+# PREPARE CHAT ANSWER
 # ============================================================
 
-def ask_chat_question(
+def prepare_chat_answer(
     user_id: str,
     session_id: str,
     question: str,
 ):
     """
-    Process a conversational document question.
+    Everything before the Gemini call, shared by the normal
+    and streaming chat endpoints:
 
-    Pipeline:
+        validate question
+            ↓
+        load chat session and conversation history
+            ↓
+        save the user message
+            ↓
+        retrieve document context
+            ↓
+        build the prompt
 
-    Chat Session
-        ↓
-    Conversation History
-        ↓
-    Save User Message
-        ↓
-    Document Retrieval
-        ↓
-    ONE Gemini Call
-        ↓
-    Save Assistant Message
-        ↓
-    Return Answer + Sources
+    Returns the prompt with the saved user message and the
+    sources, ready for one Gemini call.
     """
 
     # ========================================================
@@ -561,14 +569,115 @@ CURRENT USER QUESTION:
 ANSWER:
 """
 
-    # ========================================================
-    # ONE GEMINI CALL
-    # ========================================================
+    return {
+        "session_id": session_id,
+        "question": question,
+        "document_id": document_id,
+        "user_message": user_message,
+        "prompt": prompt,
+        "sources": sources,
+    }
+
+
+# ============================================================
+# CLEAN ANSWER
+# ============================================================
+
+FALLBACK_ANSWER = (
+    "I couldn't generate an answer "
+    "from your documents."
+)
+
+
+def clean_answer(
+    answer: str | None
+) -> str:
+    """
+    Return the answer text, or the fallback sentence when
+    Gemini returned nothing usable.
+    """
+
+    if not answer:
+        return FALLBACK_ANSWER
+
+    answer = answer.strip()
+
+    if not answer:
+        return FALLBACK_ANSWER
+
+    return answer
+
+
+# ============================================================
+# SAVE CHAT ANSWER
+# ============================================================
+
+def save_chat_answer(
+    user_id: str,
+    prepared: dict,
+    answer: str,
+):
+    """
+    Save the assistant message (with its sources) and
+    return the complete chat answer response.
+    """
+
+    assistant_answer = clean_answer(
+        answer
+    )
+
+    assistant_message = create_chat_message(
+        session_id=prepared["session_id"],
+        user_id=user_id,
+        role="assistant",
+        content=assistant_answer,
+        document_id=prepared["document_id"],
+        sources=prepared["sources"],
+    )
+
+    return {
+        "session_id": prepared["session_id"],
+        "question": prepared["question"],
+        "answer": assistant_answer,
+        "user_message": prepared["user_message"],
+        "assistant_message": assistant_message,
+        "sources": prepared["sources"],
+    }
+
+
+# ============================================================
+# ASK CHAT QUESTION
+# ============================================================
+
+def ask_chat_question(
+    user_id: str,
+    session_id: str,
+    question: str,
+):
+    """
+    Process a conversational document question.
+
+    Pipeline:
+
+    Prepare (history, user message, retrieval, prompt)
+        ↓
+    ONE Gemini Call
+        ↓
+    Save Assistant Message (with sources)
+        ↓
+    Return Answer + Sources
+    """
+
+    prepared = prepare_chat_answer(
+        user_id=user_id,
+        session_id=session_id,
+        question=question,
+    )
 
     try:
 
-        assistant_answer = generate_answer(
-            prompt
+        answer = generate_answer(
+            prepared["prompt"]
         )
 
     except Exception as error:
@@ -579,54 +688,100 @@ ANSWER:
 
         print(error)
 
-        assistant_answer = (
-            "I couldn't generate an answer "
-            "from your documents."
-        )
+        answer = None
 
-    # ========================================================
-    # VALIDATE ANSWER
-    # ========================================================
-
-    if not assistant_answer:
-
-        assistant_answer = (
-            "I couldn't generate an answer "
-            "from your documents."
-        )
-
-    assistant_answer = (
-        assistant_answer.strip()
-    )
-
-    if not assistant_answer:
-
-        assistant_answer = (
-            "I couldn't generate an answer "
-            "from your documents."
-        )
-
-    # ========================================================
-    # SAVE ASSISTANT MESSAGE
-    # ========================================================
-
-    assistant_message = create_chat_message(
-        session_id=session_id,
+    return save_chat_answer(
         user_id=user_id,
-        role="assistant",
-        content=assistant_answer,
-        document_id=document_id,
+        prepared=prepared,
+        answer=answer,
     )
 
-    # ========================================================
-    # RETURN RESULT
-    # ========================================================
 
-    return {
-        "session_id": session_id,
-        "question": question,
-        "answer": assistant_answer,
-        "user_message": user_message,
-        "assistant_message": assistant_message,
-        "sources": sources,
-    }
+# ============================================================
+# STREAM CHAT QUESTION
+# ============================================================
+
+def stream_chat_question(
+    user_id: str,
+    session_id: str,
+    question: str,
+):
+    """
+    Same as ask_chat_question(), but yields the answer as it
+    is generated.
+
+    Yields events as (name, data) tuples:
+
+        ("start", {"user_message": ..., "sources": [...]})
+        ("token", {"text": "..."})          (many)
+        ("done",  {complete chat answer response})
+
+    The assistant message is saved once the answer is
+    complete. If generation fails part-way, the text
+    received so far is kept and saved.
+    """
+
+    prepared = prepare_chat_answer(
+        user_id=user_id,
+        session_id=session_id,
+        question=question,
+    )
+
+    yield (
+        "start",
+        {
+            "user_message": prepared["user_message"],
+            "sources": prepared["sources"],
+        },
+    )
+
+    parts = []
+
+    try:
+
+        for text in stream_answer(
+            prepared["prompt"]
+        ):
+
+            parts.append(
+                text
+            )
+
+            yield (
+                "token",
+                {
+                    "text": text,
+                },
+            )
+
+    except Exception as error:
+
+        print(
+            "Chat RAG streaming failed:"
+        )
+
+        print(error)
+
+        if not parts:
+
+            parts.append(
+                FALLBACK_ANSWER
+            )
+
+            yield (
+                "token",
+                {
+                    "text": FALLBACK_ANSWER,
+                },
+            )
+
+    yield (
+        "done",
+        save_chat_answer(
+            user_id=user_id,
+            prepared=prepared,
+            answer="".join(
+                parts
+            ),
+        ),
+    )

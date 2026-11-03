@@ -8,9 +8,71 @@ from bson import ObjectId
 
 from app.core.database import db
 
-from app.services.document_service import (
-    get_user_document
+from app.services.access_service import (
+    get_accessible_document
 )
+
+
+# ============================================================
+# SAVED SOURCES
+# ============================================================
+
+# Source fields kept with an assistant message. Passage text
+# is shortened so long answers do not bloat the message.
+SOURCE_FIELDS = (
+    "chunk_id",
+    "document_id",
+    "chunk_index",
+    "page_number",
+    "score",
+    "semantic_score",
+    "keyword_score",
+    "contextual_boost",
+    "is_neighbor"
+)
+
+MAX_SOURCE_TEXT = 1500
+
+
+def compact_sources(
+    sources: list[dict] | None
+) -> list[dict]:
+    """
+    Keep only the fields the frontend shows for a source.
+    """
+
+    if not sources:
+        return []
+
+    result = []
+
+    for source in sources:
+
+        if not isinstance(
+            source,
+            dict
+        ):
+            continue
+
+        item = {
+            field: source.get(
+                field
+            )
+            for field in SOURCE_FIELDS
+            if field in source
+        }
+
+        item["text"] = (
+            source.get(
+                "text"
+            ) or ""
+        )[:MAX_SOURCE_TEXT]
+
+        result.append(
+            item
+        )
+
+    return result
 
 
 # ============================================================
@@ -63,7 +125,8 @@ def create_chat_session(
 
     if document_id is not None:
 
-        document = get_user_document(
+        # Owned or shared documents can be chatted with.
+        document = get_accessible_document(
             document_id=document_id,
             user_id=user_id
         )
@@ -71,7 +134,7 @@ def create_chat_session(
         if not document:
 
             raise ValueError(
-                "Document not found or does not belong to the user"
+                "Document not found or not shared with the user"
             )
 
     # --------------------------------------------------------
@@ -319,7 +382,8 @@ def update_chat_session(
 
     if document_id is not None:
 
-        document = get_user_document(
+        # Owned or shared documents can be chatted with.
+        document = get_accessible_document(
             document_id=document_id,
             user_id=user_id
         )
@@ -327,7 +391,7 @@ def update_chat_session(
         if not document:
 
             raise ValueError(
-                "Document not found or does not belong to the user"
+                "Document not found or not shared with the user"
             )
 
     # --------------------------------------------------------
@@ -433,6 +497,13 @@ def delete_chat_session(
             user_id
     })
 
+    # Stop sharing the deleted chat.
+    db.chat_shares.delete_many({
+
+        "session_id":
+            session_id
+    })
+
     return True
 
 
@@ -445,7 +516,8 @@ def create_chat_message(
     user_id: str,
     role: str,
     content: str,
-    document_id: str | None = None
+    document_id: str | None = None,
+    sources: list[dict] | None = None
 ):
     """
     Create a user or assistant chat message.
@@ -560,23 +632,29 @@ def create_chat_message(
         timezone.utc
     )
 
-    message = {
+    # Assistant answers keep the passages they were drawn
+    # from, so citations are shown for older messages too.
+    saved_sources = (
+        compact_sources(
+            sources
+        )
+        if role == "assistant"
+        else []
+    )
 
+    message = {
         "session_id":
             session_id,
-
         "user_id":
             user_id,
-
         "role":
             role,
-
         "content":
             content,
-
         "document_id":
             document_id,
-
+        "sources":
+            saved_sources,
         "created_at":
             now
     }
@@ -631,7 +709,8 @@ def create_chat_message(
 
         "document_id":
             document_id,
-
+        "sources":
+            saved_sources,
         "created_at":
             now
     }
@@ -733,7 +812,11 @@ def get_chat_messages(
                 message.get(
                     "document_id"
                 ),
-
+            "sources":
+                message.get(
+                    "sources",
+                    []
+                ),
             "created_at":
                 message["created_at"]
         })

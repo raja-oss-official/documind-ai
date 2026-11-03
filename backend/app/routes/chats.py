@@ -2,6 +2,8 @@
 # IMPORTS
 # ============================================================
 
+import json
+
 from bson import ObjectId
 
 from fastapi import (
@@ -10,6 +12,8 @@ from fastapi import (
     HTTPException,
     status,
 )
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import StreamingResponse
 
 from app.schemas.chat import (
     ChatSessionCreate,
@@ -37,6 +41,7 @@ from app.services.chat_service import (
 
 from app.services.chat_rag_service import (
     ask_chat_question,
+    stream_chat_question,
 )
 
 
@@ -561,6 +566,125 @@ def ask_question_in_chat(
             detail="Unable to process chat question",
 
         )
+
+
+# ============================================================
+# ASK QUESTION IN CHAT (STREAMING)
+# ============================================================
+
+def format_event(
+    name: str,
+    data: dict,
+) -> str:
+    """
+    Format one Server-Sent Event.
+    """
+
+    payload = json.dumps(
+        jsonable_encoder(
+            data
+        )
+    )
+
+    return f"event: {name}\ndata: {payload}\n\n"
+
+
+@router.post(
+    "/{session_id}/ask/stream",
+)
+def ask_question_in_chat_stream(
+    session_id: str,
+    request: ChatQuestionRequest,
+    user_id: str = Depends(
+        get_current_user
+    ),
+):
+    """
+    Answer a chat question as a stream of Server-Sent Events:
+
+        start  - saved user message and sources
+        token  - a piece of the answer (many)
+        done   - the saved assistant message
+        error  - processing failed before an answer
+    """
+
+    validate_session_id(
+        session_id
+    )
+
+    # --------------------------------------------------------
+    # Verify chat ownership
+    # --------------------------------------------------------
+
+    session = get_chat_session(
+        session_id=session_id,
+        user_id=user_id,
+    )
+
+    if not session:
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat session not found",
+        )
+
+    question = request.question.strip()
+
+    if not question:
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Question cannot be empty",
+        )
+
+    # --------------------------------------------------------
+    # Stream events
+    # --------------------------------------------------------
+
+    def events():
+
+        try:
+
+            for name, data in stream_chat_question(
+                user_id=user_id,
+                session_id=session_id,
+                question=question,
+            ):
+
+                yield format_event(
+                    name,
+                    data,
+                )
+
+        except Exception as error:
+
+            print(
+                "Chat question streaming failed:"
+            )
+
+            print(error)
+
+            yield format_event(
+                "error",
+                {
+                    "detail": "Unable to process chat question",
+                },
+            )
+
+    return StreamingResponse(
+
+        events(),
+
+        media_type="text/event-stream",
+
+        # Disable proxy buffering so tokens arrive as they
+        # are generated.
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+
+    )
 
 
 # ============================================================

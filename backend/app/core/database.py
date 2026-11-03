@@ -192,6 +192,58 @@ db.chat_messages.create_index(
 
 
 # ============================================================
+# DOCUMENT SHARE INDEXES
+# ============================================================
+
+# A document can be shared with a user only once.
+#
+# The share's role (viewer / editor) is updated in place.
+db.document_shares.create_index(
+    [
+        ("document_id", 1),
+        ("shared_with_user_id", 1),
+    ],
+    unique=True
+)
+
+
+# "Documents shared with me" lookups.
+db.document_shares.create_index(
+    "shared_with_user_id"
+)
+
+
+# ============================================================
+# CHAT SHARE INDEXES
+# ============================================================
+
+# Chats are shared read-only, once per user.
+db.chat_shares.create_index(
+    [
+        ("session_id", 1),
+        ("shared_with_user_id", 1),
+    ],
+    unique=True
+)
+
+
+# "Chats shared with me" lookups.
+db.chat_shares.create_index(
+    "shared_with_user_id"
+)
+
+
+# ============================================================
+# ORIGINAL FILE (GRIDFS) INDEXES
+# ============================================================
+
+# Find a document's stored original file for previews.
+db["document_files.files"].create_index(
+    "metadata.document_id"
+)
+
+
+# ============================================================
 # DATABASE CONNECTION TEST
 # ============================================================
 

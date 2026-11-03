@@ -15,7 +15,9 @@ import {
     fileExtension,
     listChats,
     listDocuments,
+    listSharedChats,
     uploadDocument,
+    waitForDocument,
 } from "../api.js";
 import Overview from "./Overview.jsx";
 import DocumentTable from "./DocumentTable.jsx";
@@ -78,6 +80,7 @@ function Dashboard({ user, onLogout }) {
     const [statusFilter, setStatusFilter] = useState("all");
 
     const [chats, setChats] = useState([]);
+    const [sharedChats, setSharedChats] = useState([]);
     const [activeChatId, setActiveChatId] = useState(null);
 
     const [uploadState, setUploadState] = useState({ active: false, fileName: "", index: 0, total: 0 });
@@ -113,9 +116,15 @@ function Dashboard({ user, onLogout }) {
 
     const refreshChats = useCallback(
         () =>
-            listChats()
-                .then((data) => setChats(Array.isArray(data) ? data : []))
-                .catch((error) => setNotice({ type: "error", text: error.message })),
+            Promise.all([
+                listChats()
+                    .then((data) => setChats(Array.isArray(data) ? data : []))
+                    .catch((error) => setNotice({ type: "error", text: error.message })),
+                // Chats other users shared (read-only); empty on older backends.
+                listSharedChats()
+                    .then((data) => setSharedChats(Array.isArray(data) ? data : []))
+                    .catch(() => setSharedChats([])),
+            ]),
         []
     );
 
@@ -127,6 +136,22 @@ function Dashboard({ user, onLogout }) {
         refreshDocuments();
         refreshChats();
     }, [refreshDocuments, refreshChats]);
+
+    // ============================================================
+    // BACKGROUND PROCESSING STATUS
+    // ============================================================
+    // Uploads are processed on the server after the request returns;
+    // refresh the list until no document is still processing.
+    const anyProcessing = documents.some((doc) => doc.status === "processing");
+
+    useEffect(() => {
+        if (!anyProcessing) {
+            return;
+        }
+
+        const timer = setInterval(refreshDocuments, 4000);
+        return () => clearInterval(timer);
+    }, [anyProcessing, refreshDocuments]);
 
     // ============================================================
     // THEME (LIGHT / DARK)
@@ -203,7 +228,14 @@ function Dashboard({ user, onLogout }) {
             markItem(index, "uploading");
 
             try {
-                const result = await uploadDocument(file);
+                let result = await uploadDocument(file);
+                await refreshDocuments();
+
+                // The server processes the file in the background.
+                if (result.status === "processing") {
+                    const processed = await waitForDocument(result.id);
+                    result = { ...processed, message: processed.processing_error };
+                }
 
                 if (result.status === "failed") {
                     problems.push(`${file.name}: ${result.message || "processing failed"}`);
@@ -634,11 +666,13 @@ function Dashboard({ user, onLogout }) {
                         <DocumentDetails
                             key={selectedDocument.id}
                             document={selectedDocument}
+                            documents={documents}
+                            userId={user?.id}
                             onBack={() => setSelectedDocumentId(null)}
                             onChanged={refreshDocuments}
-                            onDeleted={() => {
+                            onDeleted={(message) => {
                                 setSelectedDocumentId(null);
-                                setNotice({ type: "success", text: "Document deleted successfully." });
+                                setNotice({ type: "success", text: message || "Document deleted successfully." });
                                 refreshDocuments();
                             }}
                             onSearch={(documentId) => startSearch("", documentId)}
@@ -689,6 +723,7 @@ function Dashboard({ user, onLogout }) {
                             pendingPrompt={pendingPrompt}
                             onPromptConsumed={() => setPendingPrompt(null)}
                             chats={chats}
+                            sharedChats={sharedChats}
                             documents={documents}
                             activeChatId={activeChatId}
                             onSelectChat={setActiveChatId}

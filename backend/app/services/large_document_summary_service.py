@@ -2,6 +2,9 @@
 # IMPORTS
 # ============================================================
 
+import math
+from concurrent.futures import ThreadPoolExecutor
+
 from app.services.gemini_service import generate_answer
 
 
@@ -9,7 +12,18 @@ from app.services.gemini_service import generate_answer
 # CONFIGURATION
 # ============================================================
 
-CHUNKS_PER_BATCH = 5
+# Chunks are about 500 characters, so a batch of 24 is
+# roughly 12,000 characters: large enough to keep the number
+# of Gemini calls low, small enough for a focused summary.
+MIN_CHUNKS_PER_BATCH = 24
+
+# Very long documents use bigger batches instead of more
+# calls, so a summary never needs more than 16 batch calls.
+MAX_BATCHES = 16
+
+# Batches are summarized in parallel to keep the total
+# time close to that of a few sequential calls.
+PARALLEL_BATCHES = 4
 
 
 # ============================================================
@@ -111,35 +125,47 @@ def generate_large_document_summary(
             "No document chunks were provided"
         )
 
-    batch_summaries = []
-
     # --------------------------------------------------------
-    # Process chunks in batches
+    # Split chunks into batches
     # --------------------------------------------------------
 
-    for start in range(
-        0,
-        len(chunks),
-        CHUNKS_PER_BATCH
-    ):
+    batch_size = max(
+        MIN_CHUNKS_PER_BATCH,
+        math.ceil(
+            len(chunks) / MAX_BATCHES
+        )
+    )
 
-        batch = chunks[
+    batches = [
+        chunks[
             start:
-            start + CHUNKS_PER_BATCH
+            start + batch_size
         ]
-
-        print(
-            f"Summarizing chunks "
-            f"{start + 1} to "
-            f"{start + len(batch)}..."
+        for start in range(
+            0,
+            len(chunks),
+            batch_size
         )
+    ]
 
-        batch_summary = summarize_chunk_batch(
-            batch
-        )
+    print(
+        f"Summarizing {len(chunks)} chunks "
+        f"in {len(batches)} batches..."
+    )
 
-        batch_summaries.append(
-            batch_summary
+    # --------------------------------------------------------
+    # Summarize batches in parallel (order is preserved)
+    # --------------------------------------------------------
+
+    with ThreadPoolExecutor(
+        max_workers=PARALLEL_BATCHES
+    ) as executor:
+
+        batch_summaries = list(
+            executor.map(
+                summarize_chunk_batch,
+                batches
+            )
         )
 
     # --------------------------------------------------------
@@ -350,5 +376,9 @@ def generate_large_document_summary_result(
     final_result = generate_final_summary(
         intermediate_summary
     )
+
+    final_result[
+        "method"
+    ] = "map_reduce"
 
     return final_result

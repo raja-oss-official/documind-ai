@@ -12,7 +12,10 @@ import pytesseract
 from PIL import Image
 
 from app.services.pdf_service import extract_text_from_pdf
-from app.services.ocr_service import extract_text_from_scanned_pdf
+from app.services.ocr_service import (
+    extract_text_from_scanned_pdf,
+    ocr_language,
+)
 
 
 # ============================================================
@@ -326,7 +329,7 @@ def extract_text_from_image(file_path: str):
 
         text = pytesseract.image_to_string(
             image,
-            lang="eng",
+            lang=ocr_language(),
         ).strip()
 
     except Exception as error:

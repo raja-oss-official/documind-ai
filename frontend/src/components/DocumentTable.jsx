@@ -94,6 +94,11 @@ function DocumentTable({
                             <FileIcon filename={document.filename} />
                             <span>
                                 {document.filename}
+                                {document.shared && (
+                                    <span className="summary-flag shared-flag" title={`Shared by ${document.owner_name || "another user"}`}>
+                                        <Icon name="share" size={11} /> Shared
+                                    </span>
+                                )}
                                 {document.summary && (
                                     <span className="summary-flag">
                                         <Icon name="sparkles" size={11} /> Summary
