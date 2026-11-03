@@ -444,10 +444,15 @@ function Dashboard({ user, onLogout }) {
     // ============================================================
     // DERIVED VALUES
     // ============================================================
-    const completedDocuments = documents.filter((doc) => doc.status === "completed");
+    const completedDocuments = documents.filter((doc) => doc.status === "completed" && !isVideo(doc));
     const selectedDocument = documents.find((doc) => doc.id === selectedDocumentId);
+    // YT AI Chat (videos and their chats) is kept separate from the
+    // document features (Dashboard, Documents, AI Search, AI Chat).
     const fileDocuments = documents.filter((doc) => !isVideo(doc));
     const videos = documents.filter(isVideo);
+    const videoIds = new Set(videos.map((video) => video.id));
+    const documentChats = chats.filter((chat) => !videoIds.has(chat.document_id));
+    const videoChats = chats.filter((chat) => videoIds.has(chat.document_id));
     const filteredDocuments = fileDocuments.filter(
         (doc) =>
             (statusFilter === "all" || doc.status === statusFilter) &&
@@ -659,8 +664,8 @@ function Dashboard({ user, onLogout }) {
                         ============================================================ */}
                     {activePage === "Dashboard" && (
                         <Overview
-                            documents={documents}
-                            chats={chats}
+                            documents={fileDocuments}
+                            chats={documentChats}
                             loading={documentsLoading}
                             onUploadClick={() => fileInputRef.current?.click()}
                             onOpenDocument={openDocument}
@@ -678,7 +683,7 @@ function Dashboard({ user, onLogout }) {
                         <DocumentDetails
                             key={selectedDocument.id}
                             document={selectedDocument}
-                            documents={documents}
+                            documents={fileDocuments}
                             userId={user?.id}
                             onBack={() => setSelectedDocumentId(null)}
                             onChanged={refreshDocuments}
@@ -718,7 +723,7 @@ function Dashboard({ user, onLogout }) {
                     {activePage === "AI Search" && (
                         <SearchView
                             userId={user?.id}
-                            documents={documents}
+                            documents={fileDocuments}
                             pendingSearch={pendingSearch}
                             onPendingConsumed={() => setPendingSearch(null)}
                             onOpenDocument={openDocument}
@@ -734,9 +739,9 @@ function Dashboard({ user, onLogout }) {
                             userId={user?.id}
                             pendingPrompt={pendingPrompt}
                             onPromptConsumed={() => setPendingPrompt(null)}
-                            chats={chats}
+                            chats={documentChats}
                             sharedChats={sharedChats}
-                            documents={documents}
+                            documents={fileDocuments}
                             activeChatId={activeChatId}
                             onSelectChat={setActiveChatId}
                             onChatsChanged={refreshChats}
@@ -751,7 +756,7 @@ function Dashboard({ user, onLogout }) {
                     {activePage === "YT AI Chat" && (
                         <YouTubeView
                             videos={videos}
-                            chats={chats}
+                            chats={videoChats}
                             onVideosChanged={refreshDocuments}
                             onChatsChanged={refreshChats}
                         />

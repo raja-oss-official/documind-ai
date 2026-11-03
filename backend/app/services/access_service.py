@@ -184,6 +184,39 @@ def shared_document_ids(
 
 
 # ============================================================
+# YOUTUBE VIDEOS (KEPT OUT OF DOCUMENT FEATURES)
+# ============================================================
+
+def video_document_ids(
+    user_id: str
+) -> list[str]:
+    """
+    Return the IDs of the user's YouTube video documents.
+
+    Videos belong to YT AI Chat only, so AI Chat, Ask AI and
+    AI Search across "all documents" leave them out.
+    """
+
+    videos = db.documents.find(
+        {
+            "user_id":
+                user_id,
+            "processing_type":
+                "youtube"
+        },
+        {
+            "_id":
+                1
+        }
+    )
+
+    return [
+        str(video["_id"])
+        for video in videos
+    ]
+
+
+# ============================================================
 # CHUNK ACCESS FILTER
 # ============================================================
 
@@ -204,6 +237,9 @@ def chunk_access_filter(
 
     All documents, some shared:
         own chunks OR chunks of shared documents
+
+    "All documents" never includes YouTube videos: they are
+    only used when one video is requested (YT AI Chat).
 
     Returns None when the user cannot read the document.
     """
@@ -231,22 +267,39 @@ def chunk_access_filter(
 
     if not shared_ids:
 
-        return {
+        access_filter = {
             "user_id":
                 user_id
         }
 
-    return {
-        "$or": [
-            {
-                "user_id":
-                    user_id
-            },
-            {
-                "document_id": {
-                    "$in":
-                        shared_ids
+    else:
+
+        access_filter = {
+            "$or": [
+                {
+                    "user_id":
+                        user_id
+                },
+                {
+                    "document_id": {
+                        "$in":
+                            shared_ids
+                    }
                 }
-            }
-        ]
-    }
+            ]
+        }
+
+    video_ids = video_document_ids(
+        user_id
+    )
+
+    if video_ids:
+
+        access_filter[
+            "document_id"
+        ] = {
+            "$nin":
+                video_ids
+        }
+
+    return access_filter

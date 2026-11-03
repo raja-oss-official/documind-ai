@@ -353,3 +353,39 @@ def test_video_chats_use_brief_answer_rules(monkeypatch):
     )
 
     assert "VERY BRIEF" not in prompts[1]
+
+
+# ============================================================
+# YT AI CHAT AND AI CHAT STAY SEPARATE
+# ============================================================
+
+def test_videos_are_left_out_of_document_search_and_chat():
+
+    _, headers = make_user("Separate User")
+
+    video = client.post(
+        "/api/v1/youtube",
+        headers=headers,
+        json={"url": "https://youtu.be/ddddddddddd"},
+    ).json()
+
+    # Searching all documents does not return the video...
+    everything = client.get(
+        "/api/v1/documents/search",
+        headers=headers,
+        params={"q": "photosynthesis chlorophyll"},
+    ).json()
+
+    assert all(
+        result["document_id"] != video["id"]
+        for result in everything["results"]
+    )
+
+    # ...but the video itself can still be searched (YT AI Chat).
+    only_video = client.get(
+        "/api/v1/documents/search",
+        headers=headers,
+        params={"q": "photosynthesis chlorophyll", "document_id": video["id"]},
+    ).json()
+
+    assert only_video["result_count"] > 0

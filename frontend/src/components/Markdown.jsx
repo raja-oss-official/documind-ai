@@ -9,17 +9,39 @@ import Icon from "./Icons.jsx";
 // `code`. Builds React elements only (no raw HTML).
 
 // ============================================================
-// INLINE FORMATTING (BOLD, ITALIC, CODE)
+// INLINE FORMATTING (BOLD, ITALIC, CODE, VIDEO TIMESTAMPS)
 // ============================================================
-function renderInline(text, keyPrefix) {
-    const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*)/g);
+// With `onTimestamp`, video times like [03:12] become buttons that
+// jump the player to that moment (YT AI Chat).
+function renderInline(text, keyPrefix, onTimestamp) {
+    const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*|\[(?:\d{1,2}:)?\d{1,2}:\d{2}\])/g);
 
     return parts.map((part, index) => {
         const key = `${keyPrefix}-${index}`;
 
+        if (!part) {
+            return null;
+        }
+
+        if (onTimestamp && /^\[(?:\d{1,2}:)?\d{1,2}:\d{2}\]$/.test(part)) {
+            const [seconds = 0, minutes = 0, hours = 0] = part.slice(1, -1).split(":").reverse().map(Number);
+
+            return (
+                <button
+                    key={key}
+                    type="button"
+                    className="yt-time"
+                    onClick={() => onTimestamp(hours * 3600 + minutes * 60 + seconds)}
+                    title="Play from here"
+                >
+                    <Icon name="youtube" size={11} /> {part.slice(1, -1)}
+                </button>
+            );
+        }
+
         // Bold and italic can wrap inline code, e.g. **`%`**.
         if (/^\*\*[^*]+\*\*$/.test(part)) {
-            return <strong key={key}>{renderInline(part.slice(2, -2), key)}</strong>;
+            return <strong key={key}>{renderInline(part.slice(2, -2), key, onTimestamp)}</strong>;
         }
 
         if (/^`[^`]+`$/.test(part)) {
@@ -27,7 +49,7 @@ function renderInline(text, keyPrefix) {
         }
 
         if (/^\*[^*\s][^*]*\*$/.test(part)) {
-            return <em key={key}>{renderInline(part.slice(1, -1), key)}</em>;
+            return <em key={key}>{renderInline(part.slice(1, -1), key, onTimestamp)}</em>;
         }
 
         return part;
@@ -185,8 +207,9 @@ function CodeBlock({ language, text }) {
 // ============================================================
 // MARKDOWN RENDERER
 // ============================================================
-function Markdown({ text }) {
+function Markdown({ text, onTimestamp }) {
     const blocks = parseBlocks(text);
+    const inline = (value, key) => renderInline(value, key, onTimestamp);
 
     return (
         <div className="markdown">
@@ -194,15 +217,15 @@ function Markdown({ text }) {
                 switch (block.type) {
                     case "h":
                         return block.level <= 2 ? (
-                            <h3 key={index}>{renderInline(block.text, index)}</h3>
+                            <h3 key={index}>{inline(block.text, index)}</h3>
                         ) : (
-                            <h4 key={index}>{renderInline(block.text, index)}</h4>
+                            <h4 key={index}>{inline(block.text, index)}</h4>
                         );
                     case "ul":
                         return (
                             <ul key={index}>
                                 {block.items.map((item, itemIndex) => (
-                                    <li key={itemIndex}>{renderInline(item, `${index}-${itemIndex}`)}</li>
+                                    <li key={itemIndex}>{inline(item, `${index}-${itemIndex}`)}</li>
                                 ))}
                             </ul>
                         );
@@ -210,7 +233,7 @@ function Markdown({ text }) {
                         return (
                             <ol key={index} start={block.start}>
                                 {block.items.map((item, itemIndex) => (
-                                    <li key={itemIndex}>{renderInline(item, `${index}-${itemIndex}`)}</li>
+                                    <li key={itemIndex}>{inline(item, `${index}-${itemIndex}`)}</li>
                                 ))}
                             </ol>
                         );
@@ -223,7 +246,7 @@ function Markdown({ text }) {
                                     <thead>
                                         <tr>
                                             {block.header.map((cell, cellIndex) => (
-                                                <th key={cellIndex}>{renderInline(cell, `${index}-h${cellIndex}`)}</th>
+                                                <th key={cellIndex}>{inline(cell, `${index}-h${cellIndex}`)}</th>
                                             ))}
                                         </tr>
                                     </thead>
@@ -232,7 +255,7 @@ function Markdown({ text }) {
                                             <tr key={rowIndex}>
                                                 {row.map((cell, cellIndex) => (
                                                     <td key={cellIndex}>
-                                                        {renderInline(cell, `${index}-${rowIndex}-${cellIndex}`)}
+                                                        {inline(cell, `${index}-${rowIndex}-${cellIndex}`)}
                                                     </td>
                                                 ))}
                                             </tr>
@@ -242,11 +265,11 @@ function Markdown({ text }) {
                             </div>
                         );
                     case "quote":
-                        return <blockquote key={index}>{renderInline(block.text, index)}</blockquote>;
+                        return <blockquote key={index}>{inline(block.text, index)}</blockquote>;
                     case "hr":
                         return <hr key={index} />;
                     default:
-                        return <p key={index}>{renderInline(block.text, index)}</p>;
+                        return <p key={index}>{inline(block.text, index)}</p>;
                 }
             })}
         </div>

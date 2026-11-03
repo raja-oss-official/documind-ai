@@ -3,6 +3,7 @@
 // ============================================================
 import { useEffect, useRef, useState } from "react";
 import Icon from "./Icons.jsx";
+import Markdown from "./Markdown.jsx";
 import {
     addYouTubeVideo,
     askInChatStream,
@@ -22,58 +23,6 @@ const quickQuestions = [
     "What tools or examples are shown?",
     "What is the main conclusion?",
 ];
-
-const TIMESTAMP_SPLIT = /(\*\*[^*]+\*\*|\[(?:\d{1,2}:)?\d{1,2}:\d{2}\])/g;
-
-// ============================================================
-// BRIEF ANSWER (CLICKABLE TIMESTAMPS)
-// ============================================================
-// Answers are short: plain lines and bullets, **bold**, and [mm:ss]
-// timestamps that jump the player to that moment.
-function BriefAnswer({ text, onSeek }) {
-    const renderInline = (line, key) =>
-        line.split(TIMESTAMP_SPLIT).map((part, index) => {
-            const seconds = parseTimestamp(part);
-
-            if (seconds !== null && /^\[[\d:]+\]$/.test(part)) {
-                return (
-                    <button
-                        key={`${key}-${index}`}
-                        className="yt-time"
-                        onClick={() => onSeek(seconds)}
-                        title="Play from here"
-                    >
-                        <Icon name="youtube" size={11} /> {part.slice(1, -1)}
-                    </button>
-                );
-            }
-
-            if (/^\*\*[^*]+\*\*$/.test(part)) {
-                return <strong key={`${key}-${index}`}>{part.slice(2, -2)}</strong>;
-            }
-
-            return part;
-        });
-
-    const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
-    const bullets = lines.filter((line) => /^[-*•]\s+/.test(line));
-    const sentences = lines.filter((line) => !/^[-*•]\s+/.test(line));
-
-    return (
-        <div className="yt-answer-text">
-            {sentences.map((line, index) => (
-                <p key={`p${index}`}>{renderInline(line, `p${index}`)}</p>
-            ))}
-            {bullets.length > 0 && (
-                <ul>
-                    {bullets.map((line, index) => (
-                        <li key={`b${index}`}>{renderInline(line.replace(/^[-*•]\s+/, ""), `b${index}`)}</li>
-                    ))}
-                </ul>
-            )}
-        </div>
-    );
-}
 
 // ============================================================
 // SOURCE TIMESTAMPS
@@ -203,7 +152,7 @@ function VideoChat({ video, chats, onChatsChanged, onSeek }) {
                 {empty && (
                     <div className="yt-empty">
                         <strong>Ask anything about this video</strong>
-                        <span>Answers are short and link to the moment in the video.</span>
+                        <span>Short, clear answers with timestamps that jump to the moment in the video.</span>
                         <div className="yt-quick">
                             {quickQuestions.map((item) => (
                                 <button key={item} onClick={() => ask(item)} disabled={busy}>
@@ -219,7 +168,7 @@ function VideoChat({ video, chats, onChatsChanged, onSeek }) {
                         <div className="yt-answer" key={message.id}>
                             <Icon name="sparkles" size={18} gradient strokeWidth={1.7} />
                             <div>
-                                <BriefAnswer text={message.content} onSeek={onSeek} />
+                                <Markdown text={message.content} onTimestamp={onSeek} />
                                 {sourceTimes(message.sources).length > 0 && (
                                     <div className="yt-sources">
                                         <span>Sources</span>
@@ -246,7 +195,7 @@ function VideoChat({ video, chats, onChatsChanged, onSeek }) {
                         <Icon name="sparkles" size={18} gradient strokeWidth={1.7} />
                         <div>
                             {streamText ? (
-                                <BriefAnswer text={streamText} onSeek={onSeek} />
+                                <Markdown text={streamText} onTimestamp={onSeek} />
                             ) : (
                                 <div className="cb-typing" aria-label="DocuMind AI is thinking">
                                     <span />
@@ -448,7 +397,7 @@ function YouTubeView({ videos, chats, onVideosChanged, onChatsChanged }) {
                             <Icon name="youtube" size={26} />
                         </div>
                         <strong>Chat with any YouTube video</strong>
-                        <span>Add a link, then ask questions. Answers are brief and jump to the right moment.</span>
+                        <span>Add a link, then ask questions. Answers are short and clear, with timestamps that jump to the right moment.</span>
                     </div>
                 ) : (
                     <>

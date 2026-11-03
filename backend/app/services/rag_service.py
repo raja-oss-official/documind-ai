@@ -1247,7 +1247,12 @@ def candidate_document_ids(
             "user_id":
                 user_id,
             "status":
-                "completed"
+                "completed",
+            # YouTube videos belong to YT AI Chat only.
+            "processing_type": {
+                "$ne":
+                    "youtube"
+            }
         },
         {
             "_id":

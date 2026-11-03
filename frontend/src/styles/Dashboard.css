@@ -4705,6 +4705,7 @@ a.button {
 
 .yt-answer {
     display: flex;
+    min-width: 0;
     max-width: 92%;
     gap: 10px;
     align-items: flex-start;
@@ -4814,4 +4815,22 @@ a.button {
 
 .yt-sidebar > * {
     min-width: 0;
+}
+
+/* Video answers use the chat Markdown style, slightly tighter. */
+.yt-answer .markdown {
+    min-width: 0;
+    font-size: 14px;
+}
+
+.yt-answer .markdown p {
+    margin: 0 0 8px;
+}
+
+.yt-answer .markdown ul {
+    margin: 0 0 8px;
+}
+
+.yt-answer .markdown li {
+    margin: 4px 0;
 }
