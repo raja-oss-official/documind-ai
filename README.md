@@ -92,8 +92,17 @@ Every document, chunk, chat and search is scoped to the signed-in user.
 
 ### YT AI Chat (YouTube videos)
 - Paste a **public YouTube link**; the title is checked with YouTube's oEmbed endpoint and **Gemini watches the whole video** (speech and frames) to write a timestamped transcript, including notes on what is shown on screen.
-- Ask questions and get **very brief answers** (one to three sentences) with **clickable timestamps** that jump the embedded player to that moment.
-- One conversation per video, kept on the server; videos are also searchable from AI Search.
+- Supports `watch?v=`, `youtu.be/`, **Shorts**, `embed/` and `live/` links; private or removed videos are rejected with a clear message.
+- Ask questions and get **short, ChatGPT-style answers**: one direct sentence, then up to five bullets with a **bold key term**, an optional **Takeaway** line (about 90 words at most), and a **clickable timestamp** on every point that jumps the embedded player to that moment. Example:
+
+  > The video presents several fascinating facts about animals. `[00:00]`
+  > - **Rat:** it laughs when tickled, but you cannot hear its voice. `[00:18]`
+  > - **Camel:** it can eat a thorny cactus. `[00:39]`
+  >
+  > **Takeaway:** Animals have surprising and unique physical traits.
+- **Kept separate from AI Chat:** YT AI Chat uses only videos and video chats; the Dashboard, Documents, AI Search, Ask AI and AI Chat use only uploaded documents and document chats, and their "all documents" answers never include video transcripts.
+- One conversation per video, kept on the server (survives reloads and other devices).
+- Robust transcripts: whatever timestamp style Gemini writes (`[00:04]`, `00:04`, `(00:04)`, `**00:04**`, ranges, `h:mm:ss`) is normalised to `[mm:ss]`, so every passage keeps its time.
 
 ### Accounts and security
 - Register / sign in with strong-password rules.
@@ -123,7 +132,7 @@ Every document, chunk, chat and search is scoped to the signed-in user.
 | OCR | Tesseract (`pytesseract`), Poppler (`pdf2image`), Pillow |
 | Auth | PyJWT (HS256), pwdlib with Argon2 password hashing |
 | Protection | slowapi rate limiting, custom security-headers middleware, CORS |
-| Testing | pytest (98 tests) |
+| Testing | pytest (100 tests) |
 
 ---
 
@@ -475,7 +484,7 @@ Passwords need at least 8 characters with an uppercase letter, a lowercase lette
 ### YouTube
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/youtube` 🔒 | `{ "url": "…" }`: add a public video; Gemini transcribes it in the background (10/min). Chats linked to a video get brief, timestamped answers |
+| POST | `/youtube` 🔒 | `{ "url": "…" }`: add a public video; Gemini transcribes it in the background (10/min). Chats linked to a video get short, ChatGPT-style answers with timestamps |
 
 Interactive documentation for every endpoint is available at `/docs` while the backend is running.
 
@@ -490,7 +499,7 @@ Interactive documentation for every endpoint is available at `/docs` while the b
 | **Documents** | Upload (button or drag and drop), filter by status and name, open a document for statistics, AI summary, rename, delete, search in it or chat with it |
 | **AI Search** | Semantic search with document filter and result count, or **Ask AI** for a written answer |
 | **AI Chat** | Chatbot with history, suggested prompts, document scope, formatted answers, sources, copy and notes |
-| **YT AI Chat** | Add YouTube links, watch the video, and ask questions with brief answers and clickable timestamps |
+| **YT AI Chat** | Add YouTube links (including Shorts), watch the video, and ask questions; short ChatGPT-style answers with bold key points and clickable timestamps. Separate from AI Chat |
 | **Account** | Profile, change password, sign out |
 
 **Responsive design**
@@ -525,7 +534,7 @@ source .venv/bin/activate
 pytest -q
 ```
 
-The suite (98 tests) covers authentication, password security, refresh-token rotation, error handling, database indexes and query plans, chunking and search performance, large documents and backend integration, plus `test_enhancements.py`: map-reduce summaries, saved sources, streaming, background processing and GridFS storage, compare / quiz / flashcards / facts, sharing roles, and multilingual search and OCR, plus `test_youtube.py`: link parsing, transcript segments, adding videos, failures, and brief answers. These tests replace Gemini and YouTube with fakes, so they run offline.
+The suite (100 tests) covers authentication, password security, refresh-token rotation, error handling, database indexes and query plans, chunking and search performance, large documents and backend integration, plus `test_enhancements.py`: map-reduce summaries, saved sources, streaming, background processing and GridFS storage, compare / quiz / flashcards / facts, sharing roles, and multilingual search and OCR, plus `test_youtube.py`: link parsing (including Shorts), every timestamp style, transcript segments, adding videos, failures, the brief answer style, and keeping videos out of document search and AI Chat. These tests replace Gemini and YouTube with fakes, so they run offline.
 
 Frontend checks:
 
