@@ -4459,9 +4459,14 @@ a.button {
     align-content: center;
 }
 
+/* minmax(0, 1fr): the column fits the card instead of growing to
+   the text box's built-in minimum width (which pushed the Add
+   button outside the card at some window sizes and zoom levels). */
 .yt-add {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
+    min-width: 0;
 }
 
 .yt-add label {
@@ -4476,6 +4481,7 @@ a.button {
 
 .yt-add-row {
     display: flex;
+    min-width: 0;
     gap: 8px;
 }
 
@@ -4486,8 +4492,9 @@ a.button {
 }
 
 .yt-add-row .text-input {
+    width: 100%;
     min-width: 0;
-    flex: 1;
+    flex: 1 1 0;
 }
 
 /* Fixed width so "Adding..." never pushes out of the card. */
@@ -4795,4 +4802,16 @@ a.button {
     color: #fff !important;
     background: #e5302b !important;
     border-color: #e5302b !important;
+}
+
+/* Text boxes beside buttons may shrink instead of overflowing. */
+.share-form .text-input,
+.compare-form .text-input,
+.inline-form .text-input,
+.cb-rename .text-input {
+    min-width: 0;
+}
+
+.yt-sidebar > * {
+    min-width: 0;
 }
