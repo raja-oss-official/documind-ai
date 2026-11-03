@@ -323,6 +323,29 @@ export async function waitForDocument(documentId, { interval = 2000, timeout = 1
 }
 
 // ============================================================
+// YOUTUBE VIDEOS
+// ============================================================
+
+// Adds a public video by link; Gemini transcribes it in the background.
+export const addYouTubeVideo = (url) =>
+  request("/youtube", { method: "POST", body: { url } });
+
+export const isVideo = (document) => document?.processing_type === "youtube";
+
+// "[03:12]" / "[1:02:03]" → seconds; null when the text has no timestamp.
+export function parseTimestamp(text = "") {
+  const match = String(text).match(/\[(?:(\d{1,2}):)?(\d{1,2}):(\d{2})\]/);
+  return match ? Number(match[1] || 0) * 3600 + Number(match[2]) * 60 + Number(match[3]) : null;
+}
+
+export function formatTimestamp(seconds = 0) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = String(Math.floor(seconds % 60)).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${String(m).padStart(2, "0")}:${s}`;
+}
+
+// ============================================================
 // DOCUMENT TOOLS
 // ============================================================
 

@@ -13,6 +13,7 @@ import {
     checkHealth,
     createChat,
     fileExtension,
+    isVideo,
     listChats,
     listDocuments,
     listSharedChats,
@@ -25,6 +26,7 @@ import DocumentDetails from "./DocumentDetails.jsx";
 import SearchView from "./SearchView.jsx";
 import ChatView from "./ChatView.jsx";
 import AccountView from "./AccountView.jsx";
+import YouTubeView from "./YouTubeView.jsx";
 import Credits from "./Credits.jsx";
 import ShortcutsDialog from "./ShortcutsDialog.jsx";
 import { THEME_KEY, readJSON, writeJSON } from "../storage.js";
@@ -37,6 +39,7 @@ const navItems = [
     { label: "Documents", icon: "documents" },
     { label: "AI Search", icon: "search" },
     { label: "AI Chat", icon: "chat" },
+    { label: "YT AI Chat", icon: "youtube" },
     { label: "Account", icon: "user" },
 ];
 
@@ -45,6 +48,7 @@ const pageDescriptions = {
     Documents: "Manage your documents in one place.",
     "AI Search": "Search across your documents to find relevant information.",
     "AI Chat": "Ask questions about your documents in natural language.",
+    "YT AI Chat": "Paste a YouTube link and get brief answers about the video.",
     Account: "Manage your profile and account security.",
 };
 
@@ -322,6 +326,12 @@ function Dashboard({ user, onLogout }) {
     };
 
     const openDocument = (documentId) => {
+        // YouTube videos live on their own page.
+        if (isVideo(documents.find((doc) => doc.id === documentId))) {
+            navigate("YT AI Chat");
+            return;
+        }
+
         setSelectedDocumentId(documentId);
         setActivePage("Documents");
         setNotice(null);
@@ -436,7 +446,9 @@ function Dashboard({ user, onLogout }) {
     // ============================================================
     const completedDocuments = documents.filter((doc) => doc.status === "completed");
     const selectedDocument = documents.find((doc) => doc.id === selectedDocumentId);
-    const filteredDocuments = documents.filter(
+    const fileDocuments = documents.filter((doc) => !isVideo(doc));
+    const videos = documents.filter(isVideo);
+    const filteredDocuments = fileDocuments.filter(
         (doc) =>
             (statusFilter === "all" || doc.status === statusFilter) &&
             (doc.filename || "").toLowerCase().includes(documentFilter.toLowerCase())
@@ -687,7 +699,7 @@ function Dashboard({ user, onLogout }) {
                     {activePage === "Documents" && !selectedDocument && (
                         <DocumentTable
                             documents={filteredDocuments}
-                            allDocuments={documents}
+                            allDocuments={fileDocuments}
                             loading={documentsLoading}
                             error={documentsError}
                             onRetry={refreshDocuments}
@@ -730,6 +742,18 @@ function Dashboard({ user, onLogout }) {
                             onChatsChanged={refreshChats}
                             onOpenDocument={openDocument}
                             onUploadClick={() => fileInputRef.current?.click()}
+                        />
+                    )}
+
+                    {/* ============================================================
+                        YT AI CHAT PAGE
+                        ============================================================ */}
+                    {activePage === "YT AI Chat" && (
+                        <YouTubeView
+                            videos={videos}
+                            chats={chats}
+                            onVideosChanged={refreshDocuments}
+                            onChatsChanged={refreshChats}
                         />
                     )}
 

@@ -90,6 +90,11 @@ Every document, chunk, chat and search is scoped to the signed-in user.
 - Export a chat as Markdown, or print / save it as PDF.
 - Voice input and read-aloud answers (browser speech features, where supported).
 
+### YT AI Chat (YouTube videos)
+- Paste a **public YouTube link**; the title is checked with YouTube's oEmbed endpoint and **Gemini watches the whole video** (speech and frames) to write a timestamped transcript, including notes on what is shown on screen.
+- Ask questions and get **very brief answers** (one to three sentences) with **clickable timestamps** that jump the embedded player to that moment.
+- One conversation per video, kept on the server; videos are also searchable from AI Search.
+
 ### Accounts and security
 - Register / sign in with strong-password rules.
 - **JWT access tokens (30 min) + rotating refresh tokens (7 days)** stored hashed in MongoDB.
@@ -118,7 +123,7 @@ Every document, chunk, chat and search is scoped to the signed-in user.
 | OCR | Tesseract (`pytesseract`), Poppler (`pdf2image`), Pillow |
 | Auth | PyJWT (HS256), pwdlib with Argon2 password hashing |
 | Protection | slowapi rate limiting, custom security-headers middleware, CORS |
-| Testing | pytest (79 tests) |
+| Testing | pytest (98 tests) |
 
 ---
 
@@ -214,7 +219,8 @@ documind-ai/
 │   │   │   ├── search.py         Hybrid semantic search
 │   │   │   ├── chats.py          Chat sessions, messages, ask (and streaming ask)
 │   │   │   ├── document_tools.py Compare, quiz/flashcards, key facts, original file
-│   │   │   └── sharing.py        Document and chat sharing
+│   │   │   ├── sharing.py        Document and chat sharing
+│   │   │   └── youtube.py        Add YouTube videos
 │   │   ├── schemas/              Pydantic request/response models
 │   │   │   ├── user.py · document.py · chat.py · health.py
 │   │   └── services/
@@ -236,7 +242,8 @@ documind-ai/
 │   │       ├── sharing_service.py            Document and chat shares
 │   │       ├── document_processing_service.py Background extraction, chunking, embeddings
 │   │       ├── file_storage_service.py       Original files in MongoDB GridFS
-│   │       └── document_tools_service.py     Compare, quiz, flashcards, key facts
+│   │       ├── document_tools_service.py     Compare, quiz, flashcards, key facts
+│   │       └── youtube_service.py            YouTube links, Gemini transcripts, timestamps
 │   ├── tests/                    pytest suite (auth, security, indexes, search, RAG…)
 │   ├── uploads/                  Uploaded files (git-ignored)
 │   ├── requirements.txt
@@ -465,6 +472,11 @@ Passwords need at least 8 characters with an uppercase letter, a lowercase lette
 | POST | `/chats/{id}/ask` 🔒 | `{ "question": "…" }`: saves the question, answers with RAG and returns the answer, both messages and sources |
 | POST | `/chats/{id}/ask/stream` 🔒 | Same, as Server-Sent Events: `start` (sources), `token` (many), `done` (saved message) |
 
+### YouTube
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/youtube` 🔒 | `{ "url": "…" }`: add a public video; Gemini transcribes it in the background (10/min). Chats linked to a video get brief, timestamped answers |
+
 Interactive documentation for every endpoint is available at `/docs` while the backend is running.
 
 ---
@@ -478,6 +490,7 @@ Interactive documentation for every endpoint is available at `/docs` while the b
 | **Documents** | Upload (button or drag and drop), filter by status and name, open a document for statistics, AI summary, rename, delete, search in it or chat with it |
 | **AI Search** | Semantic search with document filter and result count, or **Ask AI** for a written answer |
 | **AI Chat** | Chatbot with history, suggested prompts, document scope, formatted answers, sources, copy and notes |
+| **YT AI Chat** | Add YouTube links, watch the video, and ask questions with brief answers and clickable timestamps |
 | **Account** | Profile, change password, sign out |
 
 **Responsive design**
@@ -512,7 +525,7 @@ source .venv/bin/activate
 pytest -q
 ```
 
-The suite (79 tests) covers authentication, password security, refresh-token rotation, error handling, database indexes and query plans, chunking and search performance, large documents and backend integration, plus `test_enhancements.py`: map-reduce summaries, saved sources, streaming, background processing and GridFS storage, compare / quiz / flashcards / facts, sharing roles, and multilingual search and OCR. The new tests replace Gemini with fakes, so they run offline.
+The suite (98 tests) covers authentication, password security, refresh-token rotation, error handling, database indexes and query plans, chunking and search performance, large documents and backend integration, plus `test_enhancements.py`: map-reduce summaries, saved sources, streaming, background processing and GridFS storage, compare / quiz / flashcards / facts, sharing roles, and multilingual search and OCR, plus `test_youtube.py`: link parsing, transcript segments, adding videos, failures, and brief answers. These tests replace Gemini and YouTube with fakes, so they run offline.
 
 Frontend checks:
 
@@ -532,7 +545,8 @@ npm run build
 - Original files are stored in MongoDB (GridFS); the free Atlas M0 tier has 512 MB in total.
 - Previews open PDFs at the cited page; highlighting the exact passage inside the PDF would need a PDF renderer such as pdf.js.
 - Shared chats are read-only; documents can be shared, but there are no team workspaces yet.
-- Possible next steps: a job queue for processing, pdf.js passage highlighting, team workspaces, more OCR languages.
+- YouTube: only public videos; very long videos may exceed Gemini's limits, and Gemini samples about one frame per second, so very fast visual details can be missed.
+- Possible next steps: a job queue for processing, pdf.js passage highlighting, team workspaces, more OCR languages, uploaded video files.
 
 ---
 

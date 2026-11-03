@@ -172,3 +172,16 @@ class ShareRequest(DocumentBase):
     email: EmailStr
 
     role: Literal["viewer", "editor"] = "viewer"
+
+
+# -------------------------------------------------
+# Add a YouTube Video
+# -------------------------------------------------
+
+class YouTubeRequest(DocumentBase):
+
+    url: str = Field(
+        ...,
+        min_length=5,
+        max_length=500,
+    )

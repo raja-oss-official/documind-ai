@@ -1019,6 +1019,19 @@ def list_documents(
                     "processing_type"
                 ),
 
+                "video_id": document.get(
+                    "video_id"
+                ),
+                "source_url": document.get(
+                    "source_url"
+                ),
+                "author": document.get(
+                    "author"
+                ),
+                "duration_seconds": document.get(
+                    "duration_seconds"
+                ),
+
                 "processing_error": document.get(
                     "processing_error"
                 ),
@@ -1153,6 +1166,19 @@ def get_document(
 
         "processing_type": document.get(
             "processing_type"
+        ),
+
+        "video_id": document.get(
+            "video_id"
+        ),
+        "source_url": document.get(
+            "source_url"
+        ),
+        "author": document.get(
+            "author"
+        ),
+        "duration_seconds": document.get(
+            "duration_seconds"
         ),
 
         "processing_error": document.get(

@@ -13,7 +13,7 @@ const shortcuts = [
     { keys: ["/"], label: "Focus the search or message box" },
     { keys: ["N"], label: "Start a new chat" },
     { keys: ["U"], label: "Upload documents" },
-    { keys: ["1", "–", "5"], label: "Go to Dashboard, Documents, AI Search, AI Chat, Account" },
+    { keys: ["1", "–", "6"], label: "Go to Dashboard, Documents, AI Search, AI Chat, YT AI Chat, Account" },
     { keys: ["T"], label: "Switch light / dark theme" },
     { keys: ["?"], label: "Show these shortcuts" },
     { keys: ["Esc"], label: "Close a dialog" },

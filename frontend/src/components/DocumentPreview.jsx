@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import Icon from "./Icons.jsx";
 import Modal from "./Modal.jsx";
-import { fileExtension, getDocumentFile } from "../api.js";
+import { fileExtension, getDocumentFile, isVideo, parseTimestamp } from "../api.js";
 
 // ============================================================
 // PREVIEW KINDS
@@ -25,6 +25,44 @@ function previewKind(filename) {
 // ============================================================
 // `page` opens a PDF at that page (from a cited source).
 function DocumentPreview({ document, page, passage, onClose }) {
+    // YouTube videos play from the cited moment instead.
+    if (isVideo(document)) {
+        return <VideoPreview document={document} passage={passage} onClose={onClose} />;
+    }
+
+    return <FilePreview document={document} page={page} passage={passage} onClose={onClose} />;
+}
+
+// ============================================================
+// YOUTUBE VIDEO AT THE CITED MOMENT
+// ============================================================
+function VideoPreview({ document, passage, onClose }) {
+    const start = parseTimestamp(passage) || 0;
+
+    return (
+        <Modal title={document.filename} subtitle="YouTube video" onClose={onClose} size="large">
+            {passage && (
+                <blockquote className="preview-passage">
+                    <strong>Cited moment</strong>
+                    {passage}
+                </blockquote>
+            )}
+            <div className="yt-player">
+                <iframe
+                    src={`https://www.youtube-nocookie.com/embed/${document.video_id}?rel=0&start=${start}&autoplay=1`}
+                    title={document.filename}
+                    allow="autoplay; encrypted-media; picture-in-picture"
+                    allowFullScreen
+                />
+            </div>
+        </Modal>
+    );
+}
+
+// ============================================================
+// UPLOADED FILE
+// ============================================================
+function FilePreview({ document, page, passage, onClose }) {
     // ============================================================
     // STATE
     // ============================================================

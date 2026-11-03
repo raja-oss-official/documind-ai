@@ -13,6 +13,7 @@ from app.routes.search import router as search_router
 from app.routes.documents import router as documents_router
 from app.routes.chats import router as chats_router
 from app.routes.document_tools import router as document_tools_router
+from app.routes.youtube import router as youtube_router
 from app.routes.sharing import (
     chat_router as chat_sharing_router,
     document_router as document_sharing_router,
@@ -69,6 +70,13 @@ openapi_tags = [
         "description": (
             "Share documents (viewer or editor) and chats "
             "(read-only) with other users."
+        ),
+    },
+    {
+        "name": "YouTube",
+        "description": (
+            "Add public YouTube videos by link; Gemini watches "
+            "them so you can chat about their content."
         ),
     },
     {
@@ -222,6 +230,12 @@ app.include_router(
     documents_router,
     prefix="/api/v1/documents",
     tags=["Documents"],
+)
+
+app.include_router(
+    youtube_router,
+    prefix="/api/v1/youtube",
+    tags=["YouTube"],
 )
 
 # Before the chats router so /chats/shared is not read

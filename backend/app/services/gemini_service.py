@@ -5,6 +5,7 @@
 import json
 
 from google import genai
+from google.genai import types
 
 from app.core.config import settings
 
@@ -127,3 +128,56 @@ def generate_json(prompt: str):
         raise ValueError(
             "Gemini did not return valid JSON"
         ) from error
+
+
+# ============================================================
+# GENERATE FROM A YOUTUBE VIDEO
+# ============================================================
+
+def generate_from_youtube(video_url: str, prompt: str) -> str:
+    """
+    Ask Gemini about a public YouTube video (audio and frames).
+
+    Low media resolution uses about a third of the tokens per
+    second of video, so longer videos fit in one request.
+    Models are tried in the same order as generate_answer().
+    """
+
+    last_error = None
+
+    contents = types.Content(
+        parts=[
+            types.Part(
+                file_data=types.FileData(
+                    file_uri=video_url
+                )
+            ),
+            types.Part(
+                text=prompt
+            ),
+        ]
+    )
+
+    config = types.GenerateContentConfig(
+        media_resolution=types.MediaResolution.MEDIA_RESOLUTION_LOW
+    )
+
+    for model in MODELS:
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=config
+            )
+
+            if response.text:
+                return response.text
+
+        except Exception as error:
+            last_error = error
+            print(f"Gemini model failed on video: {model}")
+            print(error)
+
+    raise RuntimeError(
+        f"All Gemini models failed. Last error: {last_error}"
+    )

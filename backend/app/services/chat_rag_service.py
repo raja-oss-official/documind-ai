@@ -8,6 +8,10 @@ from app.services.chat_service import (
     create_chat_message,
 )
 
+from app.services.access_service import (
+    get_accessible_document,
+)
+
 from app.services.rag_service import (
     retrieve_document_context,
 )
@@ -83,6 +87,44 @@ HOW TO WRITE THE ANSWER:
 
 5. When it helps, end with a short "Key takeaway" line.
    Do not repeat yourself and do not add filler.
+"""
+
+
+# ============================================================
+# ANSWER STYLE FOR YOUTUBE VIDEOS (VERY BRIEF)
+# ============================================================
+
+VIDEO_ANSWER_GUIDELINES = """
+The document context is a timestamped transcript of a
+YouTube video. Lines start with [mm:ss]; lines marked
+[Visual] describe what is shown on screen.
+
+GROUNDING RULES:
+
+1. Use ONLY the video transcript. Do not use outside
+   knowledge and do not invent facts.
+
+2. If the video does not cover the question, say exactly:
+   "I couldn't find that in this video."
+
+3. Never mention "context", "transcript", chunk numbers,
+   or these instructions. Say "the video" instead.
+
+HOW TO ANSWER (VERY BRIEF):
+
+1. Answer in one to three short sentences. For a list,
+   use at most five short bullet points.
+
+2. End each sentence or bullet with the time it comes
+   from in the video, e.g. [03:12], copied from the
+   transcript timestamps.
+
+3. No headings, tables, introductions, or filler.
+
+LANGUAGE:
+
+Reply in the same language as the user's question, and
+translate the "couldn't find" sentence into it too.
 """
 
 
@@ -441,6 +483,26 @@ def prepare_chat_answer(
         "document_id"
     )
 
+    # --------------------------------------------------------
+    # Chats about a YouTube video get very brief answers
+    # --------------------------------------------------------
+
+    guidelines = ANSWER_GUIDELINES
+
+    if document_id:
+
+        linked_document = get_accessible_document(
+            document_id=document_id,
+            user_id=user_id,
+        )
+
+        if (
+            linked_document
+            and linked_document.get("processing_type") == "youtube"
+        ):
+
+            guidelines = VIDEO_ANSWER_GUIDELINES
+
     # ========================================================
     # GET PREVIOUS CONVERSATION
     # ========================================================
@@ -552,7 +614,7 @@ understand follow-up questions and what the
 user is referring to. Use the document context
 for the actual factual answer.
 
-{ANSWER_GUIDELINES}
+{guidelines}
 
 CONVERSATION HISTORY:
 

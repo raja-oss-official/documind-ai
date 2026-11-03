@@ -185,6 +185,12 @@ const paths = {
             <path d="M12 7v5l3 2" />
         </>
     ),
+    youtube: (
+        <>
+            <rect x="2" y="5" width="20" height="14" rx="4" />
+            <path d="m10 9 5 3-5 3Z" />
+        </>
+    ),
     share: (
         <>
             <circle cx="18" cy="5" r="3" />

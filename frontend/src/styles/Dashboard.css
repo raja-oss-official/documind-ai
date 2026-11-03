@@ -2871,7 +2871,7 @@ h1,
     }
 
     .navigation {
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-columns: repeat(6, minmax(0, 1fr));
         gap: 4px;
     }
 
@@ -3117,7 +3117,7 @@ h1,
         bottom: 0;
         left: 0;
         z-index: 30;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-columns: repeat(6, minmax(0, 1fr));
         gap: 0;
         padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
         background: rgb(255 255 255 / 96%);
@@ -4426,5 +4426,329 @@ a.button {
 
     .preview-frame {
         height: 60vh;
+    }
+}
+
+/* ============================================================
+   YT AI CHAT
+   ============================================================ */
+.yt-layout {
+    display: grid;
+    grid-template-columns: 340px minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+}
+
+.yt-sidebar {
+    display: grid;
+    gap: 14px;
+    padding: 18px;
+}
+
+.yt-add {
+    display: grid;
+    gap: 8px;
+}
+
+.yt-add label {
+    color: var(--text, #252b31);
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.yt-add .muted {
+    font-size: 12px;
+}
+
+.yt-add-row {
+    display: flex;
+    gap: 8px;
+}
+
+.yt-add-row .text-input {
+    min-width: 0;
+    flex: 1;
+    min-height: 38px;
+}
+
+.yt-list {
+    display: grid;
+    gap: 8px;
+    max-height: 62vh;
+    overflow-y: auto;
+}
+
+.yt-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px;
+    background: var(--surface, #fff);
+    border: 1px solid var(--border, #e3e8f2);
+}
+
+.yt-item.active {
+    background: var(--tint-soft, #f5f8ff);
+    border-color: var(--border-tint, #b9ccff);
+    box-shadow: inset 3px 0 0 #1677e8;
+}
+
+.yt-item-main {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    gap: 10px;
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    text-align: left;
+}
+
+.yt-item-main img {
+    width: 96px;
+    aspect-ratio: 16 / 9;
+    flex-shrink: 0;
+    object-fit: cover;
+    background: var(--surface-strong, #e8ebef);
+}
+
+.yt-item-text {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+}
+
+.yt-item-text strong {
+    display: -webkit-box;
+    overflow: hidden;
+    color: var(--text, #252b31);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.35;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.yt-item-text small {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-muted, #7a838d);
+    font-size: 11px;
+}
+
+.yt-failed {
+    color: var(--danger-text, #a63a3a);
+}
+
+.yt-confirm {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.yt-main {
+    display: grid;
+    gap: 12px;
+    padding: 18px;
+}
+
+.yt-placeholder {
+    min-height: 360px;
+}
+
+.yt-player {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: #000;
+}
+
+.yt-player iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+.yt-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.yt-title h2 {
+    margin: 0;
+    color: var(--text, #252b31);
+    font-size: 16px;
+    font-weight: 650;
+}
+
+.yt-title a {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    text-decoration: none;
+}
+
+.yt-status {
+    margin: 0;
+}
+
+.yt-chat {
+    display: grid;
+    gap: 10px;
+    border-top: 1px solid var(--border, #edf0f2);
+    padding-top: 12px;
+}
+
+.yt-messages {
+    display: flex;
+    max-height: 46vh;
+    min-height: 140px;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.yt-empty {
+    display: grid;
+    gap: 6px;
+    padding: 8px 0;
+    color: var(--text-muted, #7a838d);
+    font-size: 13px;
+}
+
+.yt-empty strong {
+    color: var(--text, #252b31);
+    font-size: 14px;
+}
+
+.yt-quick {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.yt-quick button {
+    padding: 6px 12px;
+    color: var(--accent-text, #1466d8);
+    background: var(--tint, #eef4ff);
+    border: 1px solid var(--border-tint, #d9e5ff);
+    font-size: 12px;
+}
+
+.yt-quick button:hover:not(:disabled) {
+    border-color: var(--accent-text, #1466d8);
+}
+
+.yt-question {
+    align-self: flex-end;
+    max-width: 80%;
+    padding: 9px 13px;
+    color: #fff;
+    background: var(--brand-gradient, #1677e8);
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.yt-answer {
+    display: flex;
+    max-width: 92%;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.yt-answer > .icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.yt-answer-text {
+    color: var(--text, #252b31);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.yt-answer-text p {
+    margin: 0 0 4px;
+}
+
+.yt-answer-text ul {
+    margin: 2px 0 0;
+    padding-left: 18px;
+}
+
+.yt-time {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin: 0 2px;
+    padding: 0 6px;
+    color: var(--accent-text, #1466d8);
+    background: var(--tint, #eef4ff);
+    border: 1px solid var(--border-tint, #d9e5ff);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.6;
+    vertical-align: baseline;
+}
+
+.yt-time:hover {
+    border-color: var(--accent-text, #1466d8);
+}
+
+.yt-sources {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    color: var(--text-muted, #8a929b);
+    font-size: 11px;
+}
+
+.yt-sources span {
+    margin-right: 2px;
+}
+
+.yt-composer {
+    display: flex;
+    gap: 8px;
+    padding: 6px 6px 6px 12px;
+    background: var(--surface, #fff);
+    border: 1px solid var(--border-strong, #cfd5dc);
+}
+
+.yt-composer:focus-within {
+    border-color: #1677e8;
+}
+
+.yt-composer input {
+    min-width: 0;
+    flex: 1;
+    color: var(--text, #252b31);
+    background: transparent;
+    border: 0;
+    outline: 0;
+    font-size: 14px;
+}
+
+@media (max-width: 1000px) {
+    .yt-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .yt-list {
+        max-height: none;
     }
 }
